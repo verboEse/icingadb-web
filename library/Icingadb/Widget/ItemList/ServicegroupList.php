@@ -7,6 +7,7 @@ namespace Icinga\Module\Icingadb\Widget\ItemList;
 use Icinga\Module\Icingadb\Common\NoSubjectLink;
 use Icinga\Module\Icingadb\Common\ViewMode;
 use Icinga\Module\Icingadb\Common\BaseItemList;
+use Icinga\Module\Icingadb\Widget\Grid\ServicegroupGridCell;
 use ipl\Web\Url;
 
 class ServicegroupList extends BaseItemList
@@ -26,6 +27,16 @@ class ServicegroupList extends BaseItemList
 
     protected function getItemClass()
     {
+        if ($this->getViewMode() === 'minimal') {
+            $this->setTag('div');
+            $this->setAttributes([
+                'class'             => 'servicegroup-list group-grid ' . $this->getViewMode(),
+                'data-base-target'  => '_next',
+            ]);
+
+            return ServicegroupGridCell::class;
+        }
+
         $this->addAttributes(['class' => $this->getViewMode()]);
 
         return ServicegroupListItem::class;
