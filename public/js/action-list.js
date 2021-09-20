@@ -36,7 +36,7 @@
 
         this.on('rendered', '.container', this.onRendered, this);
 
-        this.on('keydown','.container, .action-list', this.onKeyDown, this);
+        this.on('keydown','.container', this.onKeyDown, this); //TODO change selector
     };
 
     ActionList.prototype = new Icinga.EventListener();
@@ -156,148 +156,67 @@
 
         var _this = event.data.self;
         var $list = $('#body').find('.action-list');
-        var $activeItem = $list.find('.list-item.active');
-
+        var $currentActiveItems = $list.find('.list-item.active');
+        var $toActiveItem = $currentActiveItems.first();
         event.preventDefault();
         event.stopImmediatePropagation();
         event.stopPropagation();
 
-        var container = $list.closest('.container');
-
-        if (event.keyCode === 38 && event.shiftKey) {
-            if ($activeItem === null) {
-                console.log('shift if');
-                $activeItem = $list.children().first();
-            } else {
-                console.log('shift else');
-                $activeItem = $list.find('.list-item.active').last().next();
+        if (event.shiftKey) {
+            if (event.keyCode === 40) { // shift + down
+                if ($currentActiveItems.length === 0) {
+                    $toActiveItem = $list.children().first();
+                } else {
+                    $toActiveItem = $currentActiveItems.last().next();
+                    if ($toActiveItem.length === 0) {
+                        // If the last element is already selected and the
+                        // shift + down key is pressed again, should the first (upper) elements be selected?
+                    }
+                }
+            } else if (event.keyCode === 38 && $currentActiveItems.length > 1) { // shift + up
+                $currentActiveItems.last().removeClass('active');
+                $toActiveItem = $list.find('.list-item.active');
             }
-        } else if (event.keyCode === 40) {
-            $activeItem.removeClass('active');
-            if ($activeItem === null) {
-                $activeItem = $list.children().first();
+        } else if (event.keyCode === 40) { // down
+            $currentActiveItems.removeClass('active');
+            if ($currentActiveItems.length === 0) {
+                $toActiveItem = $list.children().first();
             } else {
-                console.log('up else');
-                $activeItem = $activeItem.next();
+                $toActiveItem = $currentActiveItems.next();
+                // $currentActiveItems is the last item in the list and have no next element
+                if ($toActiveItem.length === 0) {
+                    $toActiveItem = $list.children().first();
+                }
             }
-        } else if (event.keyCode === 38) {
-            $activeItem.removeClass('active');
-            if ($activeItem === null) {
-                $activeItem = $list.children().last();
+        } else if (event.keyCode === 38) { // up
+            $currentActiveItems.removeClass('active');
+            if ($currentActiveItems.length === 0) {
+                $toActiveItem = $list.children().last();
             } else {
-                console.log('down else');
-                $activeItem = $activeItem.prev();
+                $toActiveItem = $currentActiveItems.prev();
+                // $currentActiveItems is the first item in the list and have no prev element
+                if ($toActiveItem.length === 0) {
+                    $toActiveItem = $list.children().last();
+                }
             }
         }
+
+        $toActiveItem.addClass('active');
+        var activeItems = $list.find('.list-item.active');
         var url;
-        $activeItem.addClass('active');
-        var allActives = $list.find('.list-item.active');
-        console.log(allActives);
-        console.log(allActives.length);
-        if (allActives.length > 1) {
-            var filters = allActives.map(function () {
+        if (activeItems.length > 1) {
+            var filters = activeItems.map(function () {
                 return $(this).attr('data-icinga-multiselect-filter');
             });
-            console.log('------ifffff------');
-
 
             url = $list.attr('data-icinga-multiselect-url') + '?(' + filters.toArray().join('|') + ')';
         } else {
-            console.log('------elsse------');
-            url = $activeItem.find('[href]').first().attr('href');
+            url = $toActiveItem.find('[href]').first().attr('href');
         }
-
-
-
-
 
         _this.icinga.loader.loadUrl(
-            url, _this.icinga.loader.getLinkTargetFor($activeItem)
+            url, _this.icinga.loader.getLinkTargetFor($toActiveItem)
         );
-
-       /* if ($list.is('[data-icinga-multiselect-url]')) {
-            if (event.ctrlKey || event.metaKey) {
-                $item.toggleClass('active');
-            } else if (event.shiftKey) {
-                document.getSelection().removeAllRanges();
-
-                $activeItems = $list.find('.list-item.active');
-
-                var $firstActiveItem = $activeItems.first();
-
-                $activeItems.removeClass('active');
-
-                $firstActiveItem.addClass('active');
-                $item.addClass('active');
-
-                if ($item.index() > $firstActiveItem.index()) {
-                    $item.prevUntil($firstActiveItem).addClass('active');
-                } else {
-                    var $lastActiveItem = $activeItems.last();
-
-                    $lastActiveItem.addClass('active');
-                    $item.nextUntil($lastActiveItem).addClass('active');
-                }
-            } else {
-                $list.find('.list-item.active').removeClass('active');
-                $item.addClass('active');
-            }
-
-            // For items that do not have a bottom status bar like Downtimes, Comments...
-            if (! container.children('.footer').length) {
-                container.append('<div class="footer" data-action-list-automatically-added></div>');
-            }
-        } else {
-            $list.find('.list-item.active').removeClass('active');
-            $item.addClass('active');
-        }
-
-        $activeItems = $list.find('.list-item.active');
-        var footer = container.children('.footer');
-
-        if ($activeItems.length === 0) {
-            if (footer.length) {
-                if (typeof footer.data('action-list-automatically-added') !== 'undefined') {
-                    footer.remove();
-                } else {
-                    footer.children('.selection-count').remove();
-                }
-            }
-
-            if (_this.icinga.loader.getLinkTargetFor($target).attr('id') === 'col2') {
-                _this.icinga.ui.layout1col();
-            }
-        } else {
-            var url;
-
-            if ($activeItems.length === 1) {
-                url = $target.is('a') ? $target.attr('href') : $activeItems.find('[href]').first().attr('href');
-            } else {
-                var filters = $activeItems.map(function () {
-                    return $(this).attr('data-icinga-multiselect-filter');
-                });
-
-                url = $list.attr('data-icinga-multiselect-url') + '?(' + filters.toArray().join('|') + ')';
-            }
-
-            if ($list.is('[data-icinga-multiselect-url]')) {
-                if (! footer.children('.selection-count').length) {
-                    footer.prepend('<div class="selection-count"></div>');
-                }
-
-                var label = $list.data('icinga-multiselect-count-label').replace('%d', $activeItems.length);
-                var selectedItems = footer.find('.selection-count > .selected-items');
-                if (selectedItems.length) {
-                    selectedItems.text(label);
-                } else {
-                    footer.children('.selection-count').append('<span class="selected-items">' + label + '</span>');
-                }
-            }
-
-            _this.icinga.loader.loadUrl(
-                url, _this.icinga.loader.getLinkTargetFor($target)
-            );
-        }*/
     };
 
     ActionList.prototype.onColumnClose = function (event) {
