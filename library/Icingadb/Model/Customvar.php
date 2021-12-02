@@ -64,7 +64,7 @@ class Customvar extends Model
     protected function mutateValueProperty($json)
     {
         if (is_string($json)) {
-            $data = json_decode($json);
+            $data = json_decode($json, true);
             if ($data !== null) {
                 $json = $data;
             }
