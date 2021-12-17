@@ -6,7 +6,6 @@ namespace Icinga\Module\Icingadb\Widget;
 
 use Icinga\Chart\Donut;
 use Icinga\Data\Filter\Filter;
-use Icinga\Module\Icingadb\Common\BaseFilter;
 use Icinga\Module\Icingadb\Common\Links;
 use Icinga\Module\Icingadb\Model\HoststateSummary;
 use ipl\Html\Attributes;
@@ -15,6 +14,7 @@ use ipl\Html\HtmlElement;
 use ipl\Html\HtmlString;
 use ipl\Html\TemplateString;
 use ipl\Html\Text;
+use ipl\Stdlib\BaseFilter;
 use ipl\Web\Common\Card;
 use ipl\Web\Filter\QueryString;
 
