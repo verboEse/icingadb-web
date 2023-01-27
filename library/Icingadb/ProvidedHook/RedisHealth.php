@@ -28,6 +28,17 @@ class RedisHealth extends HealthHook
             }
 
             $instance = Instance::on($this->getDb())->columns('heartbeat')->first();
+
+            if ($instance === null) {
+                $this->setState(self::STATE_UNKNOWN);
+                $this->setMessage(t(
+                    'Can\'t check Icinga Redis: Icinga DB is not running or not writing into the database'
+                    . ' (make sure the icinga feature "icingadb" is enabled)'
+                ));
+
+                return;
+            }
+
             $outdatedDbHeartbeat = $instance->heartbeat < time() - 60;
             if (! $outdatedDbHeartbeat || $instance->heartbeat <= $lastIcingaHeartbeat) {
                 $this->setState(self::STATE_OK);
@@ -37,7 +48,7 @@ class RedisHealth extends HealthHook
                 $this->setMessage(t('Icinga Redis outdated. Make sure Icinga 2 is running and connected to Redis.'));
             }
         } catch (Exception $e) {
-            $this->setState(self::STATE_UNKNOWN);
+            $this->setState(self::STATE_CRITICAL);
             $this->setMessage(sprintf(t("Can't connect to Icinga Redis: %s"), $e->getMessage()));
         }
     }

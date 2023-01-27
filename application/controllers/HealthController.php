@@ -21,13 +21,13 @@ class HealthController extends Controller
 {
     public function indexAction()
     {
-        $this->setTitle(t('Health'));
+        $this->addTitleTab(t('Health'));
 
         $db = $this->getDb();
 
         $instance = Instance::on($db)->with(['endpoint']);
-        $hoststateSummary = HoststateSummary::on($db)->with('state');
-        $servicestateSummary = ServicestateSummary::on($db)->with('state');
+        $hoststateSummary = HoststateSummary::on($db);
+        $servicestateSummary = ServicestateSummary::on($db);
 
         $this->applyRestrictions($hoststateSummary);
         $this->applyRestrictions($servicestateSummary);

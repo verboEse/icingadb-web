@@ -6,6 +6,7 @@ namespace Icinga\Module\Icingadb\Widget\Detail;
 
 use Icinga\Date\DateFormatter;
 use Icinga\Module\Icingadb\Widget\CheckAttempt;
+use Icinga\Module\Icingadb\Widget\EmptyState;
 use Icinga\Util\Format;
 use ipl\Html\BaseHtmlElement;
 use ipl\Html\Html;
@@ -122,7 +123,12 @@ class CheckStatistics extends Card
         $interval = Html::tag(
             'li',
             ['class' => 'interval'],
-            new VerticalKeyValue('Interval', Format::seconds($this->object->check_interval))
+            new VerticalKeyValue(
+                t('Interval'),
+                $this->object->check_interval
+                    ? Format::seconds($this->object->check_interval)
+                    : (new EmptyState(t('n. a.')))->setTag('span')
+            )
         );
         $nextCheck = Html::tag(
             'li',
@@ -139,51 +145,60 @@ class CheckStatistics extends Card
             )
         );
 
-        $intervalLine = Html::tag('hr', ['class' => 'interval-line']);
-
-        $bubbles = Html::tag(
-            'ul',
-            ['class' => 'below'],
-            [$lastUpdate, $interval, $nextCheck]
-        );
-
         $below = Html::tag(
-            'div',
+            'ul',
             [
-                'class' => 'below-wrapper',
+                'class' => 'below',
                 'style' => sprintf('width: %F%%;', $durationScale)
-            ],
-            [$intervalLine, $bubbles]
+            ]
         );
+        $below->add([
+            $lastUpdate,
+            $interval,
+            $nextCheck
+        ]);
 
         $body->add([$above, $timeline, $below]);
     }
 
     protected function assembleFooter(BaseHtmlElement $footer)
     {
-        $footer->add(new HorizontalKeyValue(t('Scheduling Source') . ':', $this->object->state->scheduling_source));
+        $footer->add(new HorizontalKeyValue(
+            t('Scheduling Source') . ':',
+            $this->object->state->scheduling_source ?? (new EmptyState(t('n. a.')))->setTag('span')
+        ));
     }
 
     protected function assembleHeader(BaseHtmlElement $header)
     {
-        $checkSource = [
-            new StateBall($this->object->state->is_reachable ? 'up' : 'down', StateBall::SIZE_MEDIUM),
-            ' ',
-            $this->object->state->check_source
-        ];
+        $checkSource = (new EmptyState(t('n. a.')))->setTag('span');
+        if ($this->object->state->check_source) {
+            $checkSource = [
+                new StateBall($this->object->state->is_reachable ? 'up' : 'down', StateBall::SIZE_MEDIUM),
+                ' ',
+                $this->object->state->check_source
+            ];
+        }
 
         $header->add([
-            new VerticalKeyValue(t('Command'), $this->object->checkcommand),
+            new VerticalKeyValue(t('Command'), $this->object->checkcommand_name),
             new VerticalKeyValue(
                 t('Attempts'),
-                new CheckAttempt((int) $this->object->state->attempt, (int) $this->object->max_check_attempts)
+                new CheckAttempt((int) $this->object->state->check_attempt, (int) $this->object->max_check_attempts)
             ),
             new VerticalKeyValue(t('Check Source'), $checkSource),
             new VerticalKeyValue(
                 t('Execution time'),
-                Format::seconds($this->object->state->execution_time)
+                $this->object->state->execution_time
+                    ? Format::seconds($this->object->state->execution_time)
+                    : (new EmptyState(t('n. a.')))->setTag('span')
             ),
-            new VerticalKeyValue(t('Latency'), Format::seconds($this->object->state->latency))
+            new VerticalKeyValue(
+                t('Latency'),
+                $this->object->state->latency
+                    ? Format::seconds($this->object->state->latency)
+                    : (new EmptyState(t('n. a.')))->setTag('span')
+            )
         ]);
     }
 }

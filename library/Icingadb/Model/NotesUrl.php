@@ -5,6 +5,7 @@
 namespace Icinga\Module\Icingadb\Model;
 
 use Icinga\Module\Icingadb\Model\Behavior\ActionAndNoteUrl;
+use ipl\Orm\Behavior\Binary;
 use ipl\Orm\Behaviors;
 use ipl\Orm\Model;
 use ipl\Orm\Relations;
@@ -18,7 +19,7 @@ class NotesUrl extends Model
 
     public function getKeyName()
     {
-        return ['environment_id', 'id'];
+        return 'id';
     }
 
     public function getColumns()
@@ -29,17 +30,22 @@ class NotesUrl extends Model
         ];
     }
 
-    public function getMetaData()
+    public function getColumnDefinitions()
     {
         return [
             'notes_url'         => t('Notes Url'),
-            'environment_id'    => t('Notes Url Environment Id')
+            'environment_id'    => t('Environment Id')
         ];
     }
 
     public function createBehaviors(Behaviors $behaviors)
     {
         $behaviors->add(new ActionAndNoteUrl(['notes_url']));
+
+        $behaviors->add(new Binary([
+            'id',
+            'environment_id'
+        ]));
     }
 
     public function createRelations(Relations $relations)

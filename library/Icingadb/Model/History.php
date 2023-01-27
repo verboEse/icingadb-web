@@ -6,6 +6,7 @@ namespace Icinga\Module\Icingadb\Model;
 
 use Icinga\Module\Icingadb\Model\Behavior\ReRoute;
 use Icinga\Module\Icingadb\Model\Behavior\Timestamp;
+use ipl\Orm\Behavior\Binary;
 use ipl\Orm\Behaviors;
 use ipl\Orm\Model;
 use ipl\Orm\Relations;
@@ -47,14 +48,14 @@ class History extends Model
         ];
     }
 
-    public function getMetaData()
+    public function getColumnDefinitions()
     {
         return [
-            'environment_id'    => t('Environment Id (History)'),
-            'endpoint_id'       => t('Endpoint Id (History)'),
-            'object_type'       => t('Event Object Type'),
-            'host_id'           => t('Host Id (History)'),
-            'service_id'        => t('Service Id (History)'),
+            'environment_id'    => t('Environment Id'),
+            'endpoint_id'       => t('Endpoint Id'),
+            'object_type'       => t('Object Type'),
+            'host_id'           => t('Host Id'),
+            'service_id'        => t('Service Id'),
             'event_type'        => t('Event Type'),
             'event_time'        => t('Event Time')
         ];
@@ -70,9 +71,24 @@ class History extends Model
         $behaviors->add(new Timestamp([
             'event_time'
         ]));
+
         $behaviors->add(new ReRoute([
             'hostgroup'     => 'host.hostgroup',
             'servicegroup'  => 'service.servicegroup'
+        ]));
+
+        $behaviors->add(new Binary([
+            'id',
+            'environment_id',
+            'endpoint_id',
+            'host_id',
+            'service_id',
+            'comment_history_id',
+            'downtime_history_id',
+            'flapping_history_id',
+            'notification_history_id',
+            'acknowledgement_history_id',
+            'state_history_id'
         ]));
     }
 

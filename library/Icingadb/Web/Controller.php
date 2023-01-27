@@ -10,15 +10,19 @@ use GuzzleHttp\Psr7\ServerRequest;
 use Icinga\Application\Config;
 use Icinga\Application\Icinga;
 use Icinga\Application\Logger;
+use Icinga\Application\Version;
 use Icinga\Data\ConfigObject;
 use Icinga\Date\DateFormatter;
 use Icinga\Exception\ConfigurationError;
 use Icinga\Exception\Json\JsonDecodeException;
 use Icinga\Module\Icingadb\Common\Auth;
 use Icinga\Module\Icingadb\Common\Database;
-use Icinga\Module\Icingadb\Web\Control\SearchBar\ObjectSuggestions;
 use Icinga\Module\Icingadb\Common\BaseItemList;
+use Icinga\Module\Icingadb\Common\SearchControls;
+use Icinga\Module\Icingadb\Data\CsvResultSet;
+use Icinga\Module\Icingadb\Data\JsonResultSet;
 use Icinga\Module\Icingadb\Web\Control\ViewModeSwitcher;
+use Icinga\Module\Icingadb\Widget\ItemTable\BaseItemTable;
 use Icinga\Module\Pdfexport\PrintableHtmlDocument;
 use Icinga\Module\Pdfexport\ProvidedHook\Pdfexport;
 use Icinga\Security\SecurityException;
@@ -28,27 +32,22 @@ use Icinga\Util\Environment;
 use Icinga\Util\Json;
 use ipl\Html\Html;
 use ipl\Html\ValidHtml;
-use ipl\Orm\Common\SortUtil;
-use ipl\Orm\Exception\InvalidRelationException;
 use ipl\Orm\Query;
 use ipl\Orm\UnionQuery;
 use ipl\Stdlib\Contract\Paginatable;
 use ipl\Stdlib\Filter;
-use ipl\Stdlib\Seq;
 use ipl\Web\Compat\CompatController;
 use ipl\Web\Control\LimitControl;
 use ipl\Web\Control\PaginationControl;
-use ipl\Web\Control\SearchBar;
-use ipl\Web\Control\SearchEditor;
 use ipl\Web\Control\SortControl;
 use ipl\Web\Filter\QueryString;
 use ipl\Web\Url;
-use ipl\Web\Widget\ContinueWith;
 
 class Controller extends CompatController
 {
     use Auth;
     use Database;
+    use SearchControls;
 
     /** @var Filter\Rule Filter from query string parameters */
     private $filter;
@@ -71,6 +70,32 @@ class Controller extends CompatController
         }
 
         return $this->filter;
+    }
+
+    public function createColumnControl(Query $query, ViewModeSwitcher $viewModeSwitcher)
+    {
+        // All of that is essentially what `ColumnControl::apply()` should do
+        $columnsDef = $this->params->shift('columns');
+        if (! $columnsDef) {
+            return null;
+        }
+
+        $columns = [];
+        foreach (explode(',', $columnsDef) as $column) {
+            if ($column = trim($column)) {
+                $columns[] = $column;
+            }
+        }
+
+        $query->withColumns($columns);
+
+        if (! $this->getRequest()->getUrl()->hasParam($viewModeSwitcher->getViewModeParam())) {
+            $viewModeSwitcher->setViewMode('tabular');
+        }
+
+        // For now this also returns the columns, but they should be accessible
+        // by calling `ColumnControl::getColumns()` in the future
+        return $columns;
     }
 
     /**
@@ -121,229 +146,11 @@ class Controller extends CompatController
      */
     public function createSortControl(Query $query, array $columns): SortControl
     {
-        $default = (array) $query->getModel()->getDefaultSort();
-        $normalized = [];
-        foreach ($columns as $key => $value) {
-            $normalized[SortUtil::normalizeSortSpec($key)] = $value;
-        }
-        $sortControl = (new SortControl(Url::fromRequest()))
-            ->setColumns($normalized);
-
-        if (! empty($default)) {
-            $sortControl->setDefault(SortUtil::normalizeSortSpec($default));
-        }
-
-        $sort = $sortControl->getSort();
-
-        if (! empty($sort)) {
-            $query->orderBy(SortUtil::createOrderBy($sort));
-        }
+        $sortControl = SortControl::create($columns);
 
         $this->params->shift($sortControl->getSortParam());
 
-        return $sortControl;
-    }
-
-    /**
-     * Create and return the SearchBar
-     *
-     * @param Query $query The query being filtered
-     * @param array $preserveParams Query params to preserve when redirecting
-     *
-     * @return SearchBar
-     */
-    public function createSearchBar(Query $query, array $preserveParams = null): SearchBar
-    {
-        $requestUrl = Url::fromRequest();
-        $redirectUrl = $preserveParams !== null
-            ? $requestUrl->onlyWith($preserveParams)
-            : (clone $requestUrl)->setParams([]);
-
-        $filter = QueryString::fromString((string) $this->params)
-            ->on(QueryString::ON_CONDITION, function (Filter\Condition $condition) use ($query) {
-                $this->enrichFilterCondition($condition, $query);
-            })
-            ->parse();
-
-        $searchBar = new SearchBar();
-        $searchBar->setFilter($filter);
-        $searchBar->setAction($redirectUrl->getAbsoluteUrl());
-        $searchBar->setIdProtector([$this->getRequest(), 'protectId']);
-
-        if (method_exists($this, 'completeAction')) {
-            $searchBar->setSuggestionUrl(Url::fromPath(
-                'icingadb/' . $this->getRequest()->getControllerName() . '/complete',
-                ['_disableLayout' => true, 'showCompact' => true]
-            ));
-        }
-
-        if (method_exists($this, 'searchEditorAction')) {
-            $searchBar->setEditorUrl(Url::fromPath(
-                'icingadb/' . $this->getRequest()->getControllerName() . '/search-editor'
-            )->setParams($redirectUrl->getParams()));
-        }
-
-        $metaData = iterator_to_array(
-            ObjectSuggestions::collectFilterColumns($query->getModel(), $query->getResolver())
-        );
-        $columnValidator = function (SearchBar\ValidatedColumn $column) use ($query, $metaData) {
-            $columnPath = $column->getSearchValue();
-            if (($pos = strpos($columnPath, '.vars.')) !== false) {
-                try {
-                    $relationPath = $query->getResolver()->qualifyPath(
-                        substr($columnPath, 0, $pos + 5),
-                        $query->getModel()->getTableName()
-                    );
-                    $query->getResolver()->resolveRelation($relationPath);
-                } catch (InvalidRelationException $e) {
-                    $column->setMessage(sprintf(
-                        t('"%s" is not a valid relation'),
-                        substr($e->getRelation(), 0, $pos)
-                    ));
-                }
-            } else {
-                if (strpos($columnPath, '.') === false) {
-                    $columnPath = $query->getResolver()->qualifyPath($columnPath, $query->getModel()->getTableName());
-                }
-
-                if (! isset($metaData[$columnPath])) {
-                    list($columnPath, $columnLabel) = Seq::find($metaData, $column->getSearchValue(), false);
-                    if ($columnPath === null) {
-                        $column->setMessage(t('Is not a valid column'));
-                    } else {
-                        $column->setSearchValue($columnPath);
-                        $column->setLabel($columnLabel);
-                    }
-                } else {
-                    $column->setLabel($metaData[$columnPath]);
-                }
-            }
-        };
-
-        $searchBar->on(SearchBar::ON_ADD, $columnValidator)
-            ->on(SearchBar::ON_INSERT, $columnValidator)
-            ->on(SearchBar::ON_SAVE, $columnValidator)
-            ->on(SearchBar::ON_SENT, function (SearchBar $form) use ($redirectUrl) {
-                $existingParams = $redirectUrl->getParams();
-                $redirectUrl->setQueryString(QueryString::render($form->getFilter()));
-                foreach ($existingParams->toArray(false) as $name => $value) {
-                    if (is_int($name)) {
-                        $name = $value;
-                        $value = true;
-                    }
-
-                    $redirectUrl->getParams()->addEncoded($name, $value);
-                }
-
-                $form->setRedirectUrl($redirectUrl);
-            })->on(SearchBar::ON_SUCCESS, function (SearchBar $form) {
-                $this->getResponse()->redirectAndExit($form->getRedirectUrl());
-            })->handleRequest(ServerRequest::fromGlobals());
-
-        Html::tag('div', ['class' => 'filter'])->wrap($searchBar);
-
-        return $searchBar;
-    }
-
-    /**
-     * Create and return the SearchEditor
-     *
-     * @param Query $query The query being filtered
-     * @param array $preserveParams Query params to preserve when redirecting
-     *
-     * @return SearchEditor
-     */
-    public function createSearchEditor(Query $query, array $preserveParams = null): SearchEditor
-    {
-        $requestUrl = Url::fromRequest();
-        $redirectUrl = Url::fromPath('icingadb/' . $this->getRequest()->getControllerName());
-        if (! empty($preserveParams)) {
-            $redirectUrl->setParams($requestUrl->onlyWith($preserveParams)->getParams());
-        }
-
-        $editor = new SearchEditor();
-        $editor->setQueryString((string) $this->params->without($preserveParams));
-        $editor->setAction($requestUrl->getAbsoluteUrl());
-
-        if (method_exists($this, 'completeAction')) {
-            $editor->setSuggestionUrl(Url::fromPath(
-                'icingadb/' . $this->getRequest()->getControllerName() . '/complete',
-                ['_disableLayout' => true, 'showCompact' => true]
-            ));
-        }
-
-        $editor->getParser()->on(QueryString::ON_CONDITION, function (Filter\Condition $condition) use ($query) {
-            if ($condition->getColumn()) {
-                $this->enrichFilterCondition($condition, $query);
-            }
-        });
-
-        $metaData = iterator_to_array(
-            ObjectSuggestions::collectFilterColumns($query->getModel(), $query->getResolver())
-        );
-        $editor->on(SearchEditor::ON_VALIDATE_COLUMN, function (Filter\Condition $condition) use ($query, $metaData) {
-            $column = $condition->getColumn();
-            if (($pos = strpos($column, '.vars.')) !== false) {
-                try {
-                    $query->getResolver()->resolveRelation(substr($column, 0, $pos + 5));
-                } catch (InvalidRelationException $e) {
-                    throw new SearchBar\SearchException(sprintf(
-                        t('"%s" is not a valid relation'),
-                        substr($e->getRelation(), 0, $pos)
-                    ));
-                }
-            } else {
-                if (! isset($metaData[$column])) {
-                    $path = Seq::findKey($metaData, $condition->metaData()->get('columnLabel', $column), false);
-                    if ($path === null) {
-                        throw new SearchBar\SearchException(t('Is not a valid column'));
-                    } else {
-                        $condition->setColumn($path);
-                    }
-                }
-            }
-        })->on(SearchEditor::ON_SUCCESS, function (SearchEditor $form) use ($redirectUrl) {
-            $existingParams = $redirectUrl->getParams();
-            $redirectUrl->setQueryString(QueryString::render($form->getFilter()));
-            foreach ($existingParams->toArray(false) as $name => $value) {
-                if (is_int($name)) {
-                    $name = $value;
-                    $value = true;
-                }
-
-                $redirectUrl->getParams()->addEncoded($name, $value);
-            }
-
-            $this->getResponse()
-                ->setHeader('X-Icinga-Container', '_self')
-                ->redirectAndExit($redirectUrl);
-        })->handleRequest(ServerRequest::fromGlobals());
-
-        return $editor;
-    }
-
-    /**
-     * Create and return a ContinueWith
-     *
-     * This will automatically be appended to the SearchBar's wrapper. It's not necessary
-     * to add it separately as control or content!
-     *
-     * @param Url $detailsUrl
-     * @param SearchBar $searchBar
-     *
-     * @return ContinueWith
-     */
-    public function createContinueWith(Url $detailsUrl, SearchBar $searchBar): ContinueWith
-    {
-        $continueWith = new ContinueWith($detailsUrl, [$searchBar, 'getFilter']);
-        $continueWith->setTitle(t('Show bulk processing actions for all filtered results'));
-        $continueWith->setBaseTarget('_next');
-        $continueWith->getAttributes()
-            ->set('id', $this->getRequest()->protectId('continue-with'));
-
-        $searchBar->getWrapper()->add($continueWith);
-
-        return $continueWith;
+        return $sortControl->apply($query);
     }
 
     /**
@@ -410,6 +217,9 @@ class Controller extends CompatController
 
                 try {
                     $preferencesStore = PreferencesStore::create(new ConfigObject([
+                        //TODO: Don't set store key as it will no longer be needed once we drop support for
+                        // lower version of icingaweb2 then v2.11.
+                        //https://github.com/Icinga/icingaweb2/pull/4765
                         'store'     => Config::app()->get('global', 'config_backend', 'db'),
                         'resource'  => Config::app()->get('global', 'config_resource')
                     ]), $user);
@@ -501,7 +311,7 @@ class Controller extends CompatController
 
         $filter = Filter::any();
         foreach ($query->getModel()->getSearchColumns() as $column) {
-            $filter->add(Filter::equal($column, "*$q*"));
+            $filter->add(Filter::like($column, "*$q*"));
         }
 
         $requestUrl = Url::fromRequest();
@@ -563,12 +373,22 @@ class Controller extends CompatController
             return true;
         }
 
+        // It only makes sense to export a single result to CSV or JSON
+        $query = $queries[0];
+
+        // No matter the format, a limit should only apply if set
+        if ($this->format !== null) {
+            $query->limit(Url::fromRequest()->getParam('limit'));
+        }
+
         if ($this->format === 'json' || $this->format === 'csv') {
-            $isJsonFormat = $this->format === 'json';
             $response = $this->getResponse();
             $fileName = $this->view->title;
 
-            if ($isJsonFormat) {
+            ob_end_clean();
+            Environment::raiseExecutionTime();
+
+            if ($this->format === 'json') {
                 $response
                     ->setHeader('Content-Type', 'application/json')
                     ->setHeader('Cache-Control', 'no-store')
@@ -577,6 +397,8 @@ class Controller extends CompatController
                         'attachment; filename=' . $fileName . '.json'
                     )
                     ->sendResponse();
+
+                JsonResultSet::stream($query);
             } else {
                 $response
                     ->setHeader('Content-Type', 'text/csv')
@@ -586,101 +408,26 @@ class Controller extends CompatController
                         'attachment; filename=' . $fileName . '.csv'
                     )
                     ->sendResponse();
+
+                CsvResultSet::stream($query);
             }
-
-            ob_end_clean();
-            Environment::raiseExecutionTime();
-
-            $query = $queries[0];
-            $query->limit(Url::fromRequest()->getParam('limit'));
-            $col = array_merge((array) $query->getModel()->getKeyName(), $query->getModel()->getColumns());
-            $tableName = $query->getModel()->getTableName();
-
-            foreach ($query->getWith() as $relationPath => $relation) {
-                $relatedCols = $relation->getTarget()->getColumns();
-                foreach ($relatedCols as $alias => $name) {
-                    if (is_int($alias)) {
-                        $alias = $name;
-                    }
-
-                    $col[] = $relationPath . '.' . $alias;
-                }
-            }
-
-            if ($isJsonFormat) {
-                echo '[';
-            }
-
-            $rs = $query->execute()->disableCache();
-
-            foreach ($rs as $i => $row) {
-                $result = [];
-                if ($i > 0) {
-                    $separator = $isJsonFormat ? ',' : "\r\n";
-                    echo $separator;
-                }
-
-                foreach ($col as $alias => $name) {
-                    if (is_int($alias)) {
-                        $alias = $name;
-                    }
-
-                    if (strpos($alias, '.') !== false) {
-                        $properties = array_slice(explode('.', $alias), 1);
-                        $alias = implode('.', $properties);
-
-                        $val = $row;
-                        do {
-                            $column = array_shift($properties);
-                            $val = $val->$column;
-                        } while (! empty($properties) && $val !== null);
-                    } else {
-                        $val = $row->$alias;
-                    }
-
-                    if (
-                        $alias === 'id' || substr($alias, -3) === '_id'
-                        || substr($alias, -9) === '_checksum'  || substr($alias, -4) === '_bin'
-                    ) {
-                        $val = base64_encode($val);
-                    }
-
-                    if ($isJsonFormat) { // Json
-                        $result[$alias] = $val;
-                    } elseif (is_bool($val)) { // CSV
-                        $result[$alias] = $val ? 'true' : 'false';
-                    } elseif (is_string($val)) {
-                        $result[$alias] = '"' . str_replace('"', '""', $val) . '"';
-                    } else {
-                        $result[$alias] = $val;
-                    }
-                }
-
-                if ($i === 0 && ! $isJsonFormat) {
-                    echo implode(',', array_keys($result)) . "\r\n";
-                }
-
-                $data = $isJsonFormat ? Json::sanitize($result) : implode(',', array_values($result));
-                echo $data;
-            }
-
-            if ($isJsonFormat) {
-                echo ']';
-            }
-
-            exit;
         }
 
         $this->getTabs()->enableDataExports();
     }
 
     /**
-     * @todo Consider making this the default in Icinga Web 2
+     * @todo Remove once support for Icinga Web 2 v2.9.x is dropped
      */
     protected function sendAsPdf()
     {
         if (! Icinga::app()->getModuleManager()->has('pdfexport')) {
             throw new ConfigurationError('The pdfexport module is required for exports to PDF');
+        }
+
+        if (version_compare(Version::VERSION, '2.10.0', '>=')) {
+            parent::sendAsPdf();
+            return;
         }
 
         putenv('ICINGAWEB_EXPORT_FORMAT=pdf');
@@ -744,46 +491,12 @@ class Controller extends CompatController
         $this->_helper->notifyPostDispatch();
     }
 
-    /**
-     * Enrich the filter condition with meta data from the query
-     *
-     * @param Filter\Condition $condition
-     * @param Query $query
-     *
-     * @return void
-     */
-    protected function enrichFilterCondition(Filter\Condition $condition, Query $query)
-    {
-        $path = $condition->getColumn();
-        if (strpos($path, '.') === false) {
-            $path = $query->getResolver()->qualifyPath($path, $query->getModel()->getTableName());
-            $condition->setColumn($path);
-        }
-
-        if (strpos($path, '.vars.') !== false) {
-            list($target, $varName) = explode('.vars.', $path);
-            if (strpos($target, '.') === false) {
-                // Programmatically translated since the full definition is available in class ObjectSuggestions
-                $condition->metaData()->set(
-                    'columnLabel',
-                    sprintf(t(ucfirst($target) . ' %s', '..<customvar-name>'), $varName)
-                );
-            }
-        } else {
-            $label = Seq::findValue(
-                ObjectSuggestions::collectFilterColumns($query->getModel(), $query->getResolver()),
-                $path
-            );
-            if ($label !== null) {
-                $condition->metaData()->set('columnLabel', $label);
-            }
-        }
-    }
-
     protected function addContent(ValidHtml $content)
     {
         if ($content instanceof BaseItemList) {
             $this->content->getAttributes()->add('class', 'full-width');
+        } elseif ($content instanceof BaseItemTable) {
+            $this->content->getAttributes()->add('class', 'full-height');
         }
 
         return parent::addContent($content);

@@ -12,9 +12,11 @@ use Icinga\Module\Icingadb\Model\Usergroup;
 use Icinga\Module\Icingadb\Widget\EmptyState;
 use Icinga\Module\Icingadb\Widget\ItemList\UserList;
 use Icinga\Module\Icingadb\Widget\ShowMore;
+use ipl\Html\Attributes;
 use ipl\Html\BaseHtmlElement;
 use ipl\Html\HtmlElement;
 use ipl\Html\Text;
+use ipl\Web\Widget\HorizontalKeyValue;
 
 class UsergroupDetail extends BaseHtmlElement
 {
@@ -33,6 +35,14 @@ class UsergroupDetail extends BaseHtmlElement
         $this->usergroup = $usergroup;
     }
 
+    protected function createPrintHeader()
+    {
+        return [
+            new HtmlElement('h2', null, Text::create(t('Details'))),
+            new HorizontalKeyValue(t('Name'), $this->usergroup->name)
+        ];
+    }
+
     protected function createCustomVars(): array
     {
         $content = [new HtmlElement('h2', null, Text::create(t('Custom Variables')))];
@@ -41,9 +51,11 @@ class UsergroupDetail extends BaseHtmlElement
 
         $vars = $this->usergroup->customvar_flat->getModel()->unflattenVars($flattenedVars);
         if (! empty($vars)) {
-            $customvarTable = new CustomVarTable($vars);
-            $customvarTable->setAttribute('id', 'usergroup-customvars');
-            $content[] = $customvarTable;
+            $content[] = new HtmlElement('div', Attributes::create([
+                'id' => 'usergroup-customvars',
+                'class' => 'collapsible',
+                'data-visible-height' => 200
+            ]), new CustomVarTable($vars, $this->usergroup));
         } else {
             $content[] = new EmptyState(t('No custom variables configured.'));
         }
@@ -74,6 +86,10 @@ class UsergroupDetail extends BaseHtmlElement
 
     protected function assemble()
     {
+        if (getenv('ICINGAWEB_EXPORT_FORMAT') === 'pdf') {
+            $this->add($this->createPrintHeader());
+        }
+
         $this->add(ObjectDetailExtensionHook::injectExtensions([
             500 => $this->createUserList(),
             700 => $this->createCustomVars()

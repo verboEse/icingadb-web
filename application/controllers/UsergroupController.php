@@ -9,6 +9,7 @@ use Icinga\Module\Icingadb\Model\Usergroup;
 use Icinga\Module\Icingadb\Web\Controller;
 use Icinga\Module\Icingadb\Widget\Detail\UsergroupDetail;
 use Icinga\Module\Icingadb\Widget\ItemList\UsergroupList;
+use ipl\Stdlib\Filter;
 
 class UsergroupController extends Controller
 {
@@ -19,13 +20,12 @@ class UsergroupController extends Controller
     {
         $this->assertRouteAccess('usergroups');
 
-        $this->setTitle(t('User Group'));
+        $this->addTitleTab(t('User Group'));
 
         $name = $this->params->getRequired('name');
 
         $query = Usergroup::on($this->getDb());
-        $query->getSelectBase()
-            ->where(['usergroup.name = ?' => $name]);
+        $query->filter(Filter::equal('usergroup.name', $name));
 
         $this->applyRestrictions($query);
 
@@ -35,6 +35,7 @@ class UsergroupController extends Controller
         }
 
         $this->usergroup = $usergroup;
+        $this->setTitle($usergroup->display_name);
     }
 
     public function indexAction()

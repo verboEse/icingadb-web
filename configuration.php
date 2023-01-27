@@ -4,6 +4,7 @@
 
 namespace Icinga\Module\Icingadb {
 
+    use Icinga\Application\Icinga;
     use Icinga\Authentication\Auth;
     use Icinga\Module\Icingadb\Web\Navigation\Renderer\HostProblemsBadge;
     use Icinga\Module\Icingadb\Web\Navigation\Renderer\ServiceProblemsBadge;
@@ -117,12 +118,12 @@ namespace Icinga\Module\Icingadb {
     );
 
     $this->provideRestriction(
-        'icingadb/blacklist/routes',
+        'icingadb/denylist/routes',
         $this->translate('Prevent access to routes that are part of the list')
     );
 
     $this->provideRestriction(
-        'icingadb/blacklist/variables',
+        'icingadb/denylist/variables',
         $this->translate('Hide custom variables of Icinga objects that are part of the list')
     );
 
@@ -326,66 +327,68 @@ namespace Icinga\Module\Icingadb {
             'icon'        => 'server'
         ]);
         $overviewSection->add(N_('Services'), [
-            'priority'    => 50,
+            'priority'    => 60,
             'description' => $this->translate('List services'),
             'url'         => 'icingadb/services',
             'icon'        => 'cog'
         ]);
         $auth = Auth::getInstance();
-        $routeBlacklist = [];
+        $routeDenylist = [];
         if ($auth->isAuthenticated() && ! $auth->getUser()->isUnrestricted()) {
             // The empty array is for PHP pre 7.4, older versions require at least a single param for array_merge
-            $routeBlacklist = array_flip(array_merge([], ...array_map(function ($restriction) {
+            $routeDenylist = array_flip(array_merge([], ...array_map(function ($restriction) {
                 return StringHelper::trimSplit($restriction);
-            }, $auth->getRestrictions('icingadb/blacklist/routes'))));
+            }, $auth->getRestrictions('icingadb/denylist/routes'))));
         }
 
-        if (! array_key_exists('servicegroups', $routeBlacklist)) {
-            $overviewSection->add(N_('Service Groups'), [
-                'description' => $this->translate('List service groups'),
-                'url'         => 'icingadb/servicegroups',
-                'priority'    => 60,
-                'icon'        => 'cogs'
-            ]);
-        }
-
-        if (! array_key_exists('hostgroups', $routeBlacklist)) {
+        if (! array_key_exists('hostgroups', $routeDenylist)) {
             $overviewSection->add(N_('Host Groups'), [
                 'description' => $this->translate('List host groups'),
                 'url'         => 'icingadb/hostgroups',
-                'priority'    => 60,
+                'priority'    => 70,
                 'icon'        => 'network-wired'
             ]);
         }
 
-        if (! array_key_exists('users', $routeBlacklist)) {
-            $overviewSection->add(N_('Users'), [
-                'description' => $this->translate('List users'),
-                'url'         => 'icingadb/users',
-                'priority'    => 70,
-                'icon'        => 'user-friends'
+        if (! array_key_exists('servicegroups', $routeDenylist)) {
+            $overviewSection->add(N_('Service Groups'), [
+                'description' => $this->translate('List service groups'),
+                'url'         => 'icingadb/servicegroups',
+                'priority'    => 80,
+                'icon'        => 'cogs'
             ]);
         }
 
-        if (! array_key_exists('usergroups', $routeBlacklist)) {
+        if (! array_key_exists('usergroups', $routeDenylist)) {
             $overviewSection->add(N_('User Groups'), [
                 'description' => $this->translate('List user groups'),
                 'url'         => 'icingadb/usergroups',
-                'priority'    => 70,
+                'priority'    => 90,
                 'icon'        => 'users'
             ]);
         }
 
+        if (! array_key_exists('users', $routeDenylist)) {
+            $overviewSection->add(N_('Users'), [
+                'description' => $this->translate('List users'),
+                'url'         => 'icingadb/users',
+                'priority'    => 100,
+                'icon'        => 'user-friends'
+            ]);
+        }
+
+
+
         $overviewSection->add(N_('Comments'), [
             'url'         => 'icingadb/comments',
             'description' => $this->translate('List comments'),
-            'priority'    => 80,
+            'priority'    => 110,
             'icon'        => 'comments'
         ]);
         $overviewSection->add(N_('Downtimes'), [
             'url'         => 'icingadb/downtimes',
             'description' => $this->translate('List downtimes'),
-            'priority'    => 80,
+            'priority'    => 120,
             'icon'        => 'plug'
         ]);
 
@@ -399,18 +402,17 @@ namespace Icinga\Module\Icingadb {
             'icon'     => 'history',
             'priority' => 90
         ));
-
-        $section->add(N_('Event Overview'), array(
-            'icon'        => 'history',
-            'description' => $this->translate('Open event overview'),
-            'priority'    => 20,
-            'url'         => 'icingadb/history'
-        ));
         $section->add(N_('Notifications'), array(
             'icon'        => 'bell',
             'description' => $this->translate('List notifications'),
-            'priority'    => 30,
+            'priority'    => 20,
             'url'         => 'icingadb/notifications',
+        ));
+        $section->add(N_('Event Overview'), array(
+            'icon'        => 'history',
+            'description' => $this->translate('Open event overview'),
+            'priority'    => 30,
+            'url'         => 'icingadb/history'
         ));
     } else {
         /*
@@ -431,64 +433,63 @@ namespace Icinga\Module\Icingadb {
             'priority' => 30
         ]);
 
-        $section->add(N_('Hosts'), [
+        $section->add(N_('Tactical Overview'), [
+            'url'           => 'icingadb/tactical',
             'priority'      => 10,
+            'description'   => $this->translate('Open tactical overview'),
+            'icon'          => 'chart-pie'
+        ]);
+
+        $section->add(N_('Hosts'), [
+            'priority'      => 20,
             'description'   => $this->translate('List hosts'),
             'renderer'      => 'HostProblemsBadge',
             'url'           => 'icingadb/hosts',
             'icon'          => 'server'
         ]);
         $section->add(N_('Services'), [
-            'priority'      => 20,
+            'priority'      => 30,
             'description'   => $this->translate('List services'),
             'renderer'      => 'ServiceProblemsBadge',
             'url'           => 'icingadb/services',
             'icon'          => 'cog'
         ]);
-        $section->add(N_('Downtimes'), [
-            'url'           => 'icingadb/downtimes',
-            'priority'      => 30,
-            'description'   => $this->translate('List downtimes'),
-            'icon'          => 'plug'
-        ]);
-        $section->add(N_('Comments'), [
-            'url'           => 'icingadb/comments',
-            'priority'      => 40,
-            'description'   => $this->translate('List comments'),
-            'icon'          => 'comments'
-        ]);
-        $section->add(N_('Notifications'), [
-            'url'           => 'icingadb/notifications',
-            'priority'      => 50,
-            'description'   => $this->translate('List notifications'),
-            'icon'          => 'bell'
-        ]);
         $section->add(N_('Service Grid'), [
             'icon'        => 'cog',
             'description' => $this->translate('Display service problems as grid'),
             'url'         => 'icingadb/services/grid?problems',
-            'priority'    => 70
+            'priority'    => 40
         ]);
 
+
         $auth = Auth::getInstance();
-        $routeBlacklist = [];
+        $routeDenylist = [];
         if ($auth->isAuthenticated() && ! $auth->getUser()->isUnrestricted()) {
             // The empty array is for PHP pre 7.4, older versions require at least a single param for array_merge
-            $routeBlacklist = array_flip(array_merge([], ...array_map(function ($restriction) {
+            $routeDenylist = array_flip(array_merge([], ...array_map(function ($restriction) {
                 return StringHelper::trimSplit($restriction);
-            }, $auth->getRestrictions('icingadb/blacklist/routes'))));
+            }, $auth->getRestrictions('icingadb/denylist/routes'))));
         }
 
-        if (! array_key_exists('users', $routeBlacklist)) {
-            $section->add(N_('Users'), [
-                'url'           => 'icingadb/users',
-                'priority'      => 60,
-                'description'   => $this->translate('List users'),
-                'icon'          => 'user-friends'
+        if (! array_key_exists('hostgroups', $routeDenylist)) {
+            $section->add(N_('Host Groups'), [
+                'url'           => 'icingadb/hostgroups',
+                'priority'      => 50,
+                'description'   => $this->translate('List host groups'),
+                'icon'          => 'network-wired'
             ]);
         }
 
-        if (! array_key_exists('usergroups', $routeBlacklist)) {
+        if (! array_key_exists('servicegroups', $routeDenylist)) {
+            $section->add(N_('Service Groups'), [
+                'url'           => 'icingadb/servicegroups',
+                'priority'      => 60,
+                'description'   => $this->translate('List service groups'),
+                'icon'          => 'cogs'
+            ]);
+        }
+
+        if (! array_key_exists('usergroups', $routeDenylist)) {
             $section->add(N_('User Groups'), [
                 'url'           => 'icingadb/usergroups',
                 'priority'      => 70,
@@ -497,41 +498,38 @@ namespace Icinga\Module\Icingadb {
             ]);
         }
 
-        if (! array_key_exists('hostgroups', $routeBlacklist)) {
-            $section->add(N_('Host Groups'), [
-                'url'           => 'icingadb/hostgroups',
+        if (! array_key_exists('users', $routeDenylist)) {
+            $section->add(N_('Users'), [
+                'url'           => 'icingadb/users',
                 'priority'      => 80,
-                'description'   => $this->translate('List host groups'),
-                'icon'          => 'network-wired'
+                'description'   => $this->translate('List users'),
+                'icon'          => 'user-friends'
             ]);
         }
 
-        if (! array_key_exists('servicegroups', $routeBlacklist)) {
-            $section->add(N_('Service Groups'), [
-                'url'           => 'icingadb/servicegroups',
-                'priority'      => 80,
-                'description'   => $this->translate('List service groups'),
-                'icon'          => 'cogs'
-            ]);
-        }
-
+        $section->add(N_('Comments'), [
+            'url'           => 'icingadb/comments',
+            'priority'      => 90,
+            'description'   => $this->translate('List comments'),
+            'icon'          => 'comments'
+        ]);
+        $section->add(N_('Downtimes'), [
+            'url'           => 'icingadb/downtimes',
+            'priority'      => 100,
+            'description'   => $this->translate('List downtimes'),
+            'icon'          => 'plug'
+        ]);
+        $section->add(N_('Notifications'), [
+            'url'           => 'icingadb/notifications',
+            'priority'      => 110,
+            'description'   => $this->translate('List notifications'),
+            'icon'          => 'bell'
+        ]);
         $section->add(N_('History'), [
             'url'           => 'icingadb/history',
-            'priority'      => 90,
+            'priority'      => 120,
             'description'   => $this->translate('List history'),
             'icon'          => 'history'
-        ]);
-        $section->add(N_('Health'), [
-            'url'           => 'icingadb/health',
-            'priority'      => 100,
-            'description'   => $this->translate('Open health overview'),
-            'icon'          => 'heartbeat'
-        ]);
-        $section->add(N_('Tactical Overview'), [
-            'url'           => 'icingadb/tactical',
-            'priority'      => 110,
-            'description'   => $this->translate('Open tactical overview'),
-            'icon'          => 'chart-pie'
         ]);
     }
 
@@ -540,15 +538,6 @@ namespace Icinga\Module\Icingadb {
         'title' => t('Configure the database backend'),
         'url'   => 'config/database'
     ]);
-
-    if ($this::exists('monitoring')) {
-        $this->provideConfigTab('backend', [
-            'label' => t('Backend'),
-            'title' => t('Configure IcingaDB as the Backend'),
-            'url'   => 'config/backend'
-        ]);
-    }
-
     $this->provideConfigTab('redis', [
         'label' => t('Redis'),
         'title' => t('Configure the Redis connections'),
@@ -572,12 +561,8 @@ namespace Icinga\Module\Icingadb {
     $this->provideJsFile('action-list.js');
     $this->provideJsFile('loadmore.js');
 
-    $forIe11 = false;
-    if (isset($_SERVER['HTTP_USER_AGENT'])) {
-        $forIe11 = (bool) preg_match('/Trident\/7.0;.*rv:11/', $_SERVER['HTTP_USER_AGENT']);
-    }
-
-    if (! $forIe11) {
+    $mg = Icinga::app()->getModuleManager();
+    if ($mg->hasEnabled('monitoring')) {
         $this->provideJsFile('migrate.js');
     }
 }

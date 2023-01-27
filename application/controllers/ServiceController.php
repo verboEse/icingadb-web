@@ -43,11 +43,12 @@ class ServiceController extends Controller
             'host',
             'host.state'
         ]);
-        $query->setResultSetClass(VolatileStateResults::class);
-
-        $query->getSelectBase()
-            ->where(['service.name = ?' => $name])
-            ->where(['service_host.name = ?' => $hostName]);
+        $query
+            ->setResultSetClass(VolatileStateResults::class)
+            ->filter(Filter::all(
+                Filter::equal('service.name', $name),
+                Filter::equal('host.name', $hostName)
+            ));
 
         $this->applyRestrictions($query);
 
@@ -61,6 +62,11 @@ class ServiceController extends Controller
         $this->loadTabsForObject($service);
 
         $this->setTitleTab($this->getRequest()->getActionName());
+        $this->setTitle(
+            t('%s on %s', '<service> on <host>'),
+            $service->display_name,
+            $service->host->display_name
+        );
     }
 
     public function indexAction()
@@ -112,7 +118,6 @@ class ServiceController extends Controller
 
         $history = History::on($db)->with([
             'host',
-            'host.service',
             'host.state',
             'service',
             'service.state',
@@ -123,13 +128,10 @@ class ServiceController extends Controller
             'acknowledgement',
             'state'
         ]);
-
-        $history
-            ->getSelectBase()
-            ->where([
-                'history.host_id = ?'    => $this->service->host_id,
-                'history.service_id = ?' => $this->service->id
-            ]);
+        $history->filter(Filter::all(
+            Filter::equal('history.host_id', $this->service->host_id),
+            Filter::equal('history.service_id', $this->service->id)
+        ));
 
         $before = $this->params->shift('before', time());
         $url = Url::fromRequest()->setParams(clone $this->params);
@@ -216,7 +218,7 @@ class ServiceController extends Controller
         if ($tab !== null) {
             $tab->setActive();
 
-            $this->view->title = $tab->getLabel();
+            $this->setTitle($tab->getLabel());
         }
     }
 

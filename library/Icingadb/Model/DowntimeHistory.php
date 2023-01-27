@@ -6,6 +6,7 @@ namespace Icinga\Module\Icingadb\Model;
 
 use Icinga\Module\Icingadb\Model\Behavior\BoolCast;
 use Icinga\Module\Icingadb\Model\Behavior\Timestamp;
+use ipl\Orm\Behavior\Binary;
 use ipl\Orm\Behaviors;
 use ipl\Orm\Model;
 use ipl\Orm\Relations;
@@ -54,29 +55,29 @@ class DowntimeHistory extends Model
         ];
     }
 
-    public function getMetaData()
+    public function getColumnDefinitions()
     {
         return [
-            'environment_id'        => t('Downtime Environment Id (History)'),
-            'endpoint_id'           => t('Downtime Endpoint Id (History)'),
-            'triggered_by_id'       => t('Downtime Triggered By Id (History)'),
-            'parent_id'             => t('Downtime Parent Id (History)'),
-            'object_type'           => t('Downtime Object Type (History)'),
-            'host_id'               => t('Downtime Host Id (History)'),
-            'service_id'            => t('Downtime Service Id (History)'),
-            'entry_time'            => t('Downtime Entry Time (History)'),
-            'author'                => t('Downtime Author (History)'),
-            'cancelled_by'          => t('Downtime Cancelled By (History)'),
-            'comment'               => t('Downtime Comment (History)'),
-            'is_flexible'           => t('Downtime Is Flexible (History)'),
-            'flexible_duration'     => t('Downtime Flexible Duration (History)'),
-            'scheduled_start_time'  => t('Downtime Scheduled Start (History)'),
-            'scheduled_end_time'    => t('Downtime Scheduled End (History)'),
-            'start_time'            => t('Downtime Actual Start (History)'),
-            'end_time'              => t('Downtime Actual End (History)'),
-            'has_been_cancelled'    => t('Downtime Has Been Cancelled (History)'),
-            'trigger_time'          => t('Downtime Trigger Time (History)'),
-            'cancel_time'           => t('Downtime Cancel Time (History)')
+            'environment_id'        => t('Environment Id'),
+            'endpoint_id'           => t('Endpoint Id'),
+            'triggered_by_id'       => t('Triggered By Downtime Id'),
+            'parent_id'             => t('Parent Downtime Id'),
+            'object_type'           => t('Object Type'),
+            'host_id'               => t('Host Id'),
+            'service_id'            => t('Service Id'),
+            'entry_time'            => t('Downtime Entry Time'),
+            'author'                => t('Downtime Author'),
+            'cancelled_by'          => t('Downtime Cancelled By'),
+            'comment'               => t('Downtime Comment'),
+            'is_flexible'           => t('Downtime Is Flexible'),
+            'flexible_duration'     => t('Downtime Flexible Duration'),
+            'scheduled_start_time'  => t('Downtime Scheduled Start'),
+            'scheduled_end_time'    => t('Downtime Scheduled End'),
+            'start_time'            => t('Downtime Actual Start'),
+            'end_time'              => t('Downtime Actual End'),
+            'has_been_cancelled'    => t('Downtime Has Been Cancelled'),
+            'trigger_time'          => t('Downtime Trigger Time'),
+            'cancel_time'           => t('Downtime Cancel Time')
         ];
     }
 
@@ -96,6 +97,16 @@ class DowntimeHistory extends Model
             'end_time',
             'trigger_time',
             'cancel_time'
+        ]));
+
+        $behaviors->add(new Binary([
+            'downtime_id',
+            'environment_id',
+            'endpoint_id',
+            'triggered_by_id',
+            'parent_id',
+            'host_id',
+            'service_id'
         ]));
     }
 

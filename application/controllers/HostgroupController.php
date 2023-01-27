@@ -11,7 +11,9 @@ use Icinga\Module\Icingadb\Redis\VolatileStateResults;
 use Icinga\Module\Icingadb\Web\Controller;
 use Icinga\Module\Icingadb\Widget\ItemList\HostList;
 use Icinga\Module\Icingadb\Widget\ItemList\HostgroupList;
+use ipl\Html\Html;
 use ipl\Stdlib\Filter;
+use ipl\Web\Widget\HorizontalKeyValue;
 
 class HostgroupController extends Controller
 {
@@ -22,7 +24,7 @@ class HostgroupController extends Controller
     {
         $this->assertRouteAccess('hostgroups');
 
-        $this->setTitle(t('Host Group'));
+        $this->addTitleTab(t('Host Group'));
 
         $name = $this->params->getRequired('name');
 
@@ -40,31 +42,42 @@ class HostgroupController extends Controller
         }
 
         $this->hostgroup = $hostgroup;
+        $this->setTitle($hostgroup->display_name);
     }
 
     public function indexAction()
     {
         $db = $this->getDb();
 
-        $hosts = Host::on($db)->with(['state', 'state.last_comment', 'icon_image'])->utilize('hostgroup');
-        $hosts->setResultSetClass(VolatileStateResults::class);
-
-        $hosts->getSelectBase()->where(['host_hostgroup.id = ?' => $this->hostgroup->id]);
+        $hosts = Host::on($db)->with(['state', 'state.last_comment', 'icon_image']);
+        $hosts
+            ->setResultSetClass(VolatileStateResults::class)
+            ->filter(Filter::equal('hostgroup.id', $this->hostgroup->id));
         $this->applyRestrictions($hosts);
 
         $limitControl = $this->createLimitControl();
         $paginationControl = $this->createPaginationControl($hosts);
         $viewModeSwitcher = $this->createViewModeSwitcher($paginationControl, $limitControl);
 
-        $hostList = (new HostList($hosts))
+        $hostList = (new HostList($hosts->execute()))
             ->setViewMode($viewModeSwitcher->getViewMode());
 
         yield $this->export($hosts);
 
-        $this->addControl((new HostgroupList([$this->hostgroup]))
-            ->setViewMode('minimal')
-            ->setDetailActionsDisabled()
-            ->setNoSubjectLink());
+        // ICINGAWEB_EXPORT_FORMAT is not set yet and $this->format is inaccessible, yeah...
+        if ($this->getRequest()->getParam('format') === 'pdf') {
+            $this->addContent((new HostgroupList([$this->hostgroup]))
+                ->setViewMode('minimal')
+                ->setDetailActionsDisabled()
+                ->setNoSubjectLink());
+            $this->addContent(Html::tag('h2', null, t('Hosts')));
+        } else {
+            $this->addControl((new HostgroupList([$this->hostgroup]))
+                ->setViewMode('minimal')
+                ->setDetailActionsDisabled()
+                ->setNoSubjectLink());
+        }
+
         $this->addControl($paginationControl);
         $this->addControl($viewModeSwitcher);
         $this->addControl($limitControl);

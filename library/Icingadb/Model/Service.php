@@ -7,17 +7,16 @@ namespace Icinga\Module\Icingadb\Model;
 use Icinga\Module\Icingadb\Common\Auth;
 use Icinga\Module\Icingadb\Model\Behavior\BoolCast;
 use Icinga\Module\Icingadb\Model\Behavior\ReRoute;
+use ipl\Orm\Behavior\Binary;
 use ipl\Orm\Behaviors;
+use ipl\Orm\Defaults;
 use ipl\Orm\Model;
-use ipl\Orm\Query;
 use ipl\Orm\Relations;
 use ipl\Orm\ResultSet;
 
 class Service extends Model
 {
     use Auth;
-
-    protected $accessorsAndMutatorsEnabled = true;
 
     public function getTableName()
     {
@@ -39,10 +38,10 @@ class Service extends Model
             'name',
             'name_ci',
             'display_name',
-            'checkcommand',
+            'checkcommand_name',
             'checkcommand_id',
             'max_check_attempts',
-            'check_timeperiod',
+            'check_timeperiod_name',
             'check_timeperiod_id',
             'check_timeout',
             'check_interval',
@@ -55,7 +54,7 @@ class Service extends Model
             'flapping_threshold_low',
             'flapping_threshold_high',
             'perfdata_enabled',
-            'eventcommand',
+            'eventcommand_name',
             'eventcommand_id',
             'is_volatile',
             'action_url_id',
@@ -63,28 +62,28 @@ class Service extends Model
             'notes',
             'icon_image_id',
             'icon_image_alt',
-            'zone',
+            'zone_name',
             'zone_id',
-            'command_endpoint',
+            'command_endpoint_name',
             'command_endpoint_id'
         ];
     }
 
-    public function getMetaData()
+    public function getColumnDefinitions()
     {
         return [
-            'environment_id'            => t('Service Environment Id'),
+            'environment_id'            => t('Environment Id'),
             'name_checksum'             => t('Service Name Checksum'),
             'properties_checksum'       => t('Service Properties Checksum'),
-            'host_id'                   => t('Service Host Id'),
+            'host_id'                   => t('Host Id'),
             'name'                      => t('Service Name'),
             'name_ci'                   => t('Service Name (CI)'),
             'display_name'              => t('Service Display Name'),
-            'checkcommand'              => t('Service Checkcommand'),
-            'checkcommand_id'           => t('Service Checkcommand Id'),
+            'checkcommand_name'         => t('Checkcommand Name'),
+            'checkcommand_id'           => t('Checkcommand Id'),
             'max_check_attempts'        => t('Service Max Check Attempts'),
-            'check_timeperiod'          => t('Service Check Timeperiod'),
-            'check_timeperiod_id'       => t('Service Check Timeperiod Id'),
+            'check_timeperiod_name'     => t('Check Timeperiod Name'),
+            'check_timeperiod_id'       => t('Check Timeperiod Id'),
             'check_timeout'             => t('Service Check Timeout'),
             'check_interval'            => t('Service Check Interval'),
             'check_retry_interval'      => t('Service Check Retry Inverval'),
@@ -96,18 +95,18 @@ class Service extends Model
             'flapping_threshold_low'    => t('Service Flapping Threshold Low'),
             'flapping_threshold_high'   => t('Service Flapping Threshold High'),
             'perfdata_enabled'          => t('Service Performance Data Enabled'),
-            'eventcommand'              => t('Service Eventcommand'),
-            'eventcommand_id'           => t('Service Eventcommand Id'),
+            'eventcommand_name'         => t('Eventcommand Name'),
+            'eventcommand_id'           => t('Eventcommand Id'),
             'is_volatile'               => t('Service Is Volatile'),
-            'action_url_id'             => t('Service Action Url Id'),
-            'notes_url_id'              => t('Service Notes Url Id'),
+            'action_url_id'             => t('Action Url Id'),
+            'notes_url_id'              => t('Notes Url Id'),
             'notes'                     => t('Service Notes'),
-            'icon_image_id'             => t('Service Icon Image Id'),
-            'icon_image_alt'            => t('Service Icon Image Alt'),
-            'zone'                      => t('Service Zone'),
-            'zone_id'                   => t('Service Zone Id'),
-            'command_endpoint'          => t('Service Command Endpoint'),
-            'command_endpoint_id'       => t('Service Command Endpoint Id')
+            'icon_image_id'             => t('Icon Image Id'),
+            'icon_image_alt'            => t('Icon Image Alt'),
+            'zone_name'                 => t('Zone Name'),
+            'zone_id'                   => t('Zone Id'),
+            'command_endpoint_name'     => t('Endpoint Name'),
+            'command_endpoint_id'       => t('Endpoint Id')
         ];
     }
 
@@ -128,34 +127,46 @@ class Service extends Model
             'passive_checks_enabled',
             'event_handler_enabled',
             'notifications_enabled',
-            'flapping_enabled'
+            'flapping_enabled',
+            'is_volatile'
         ]));
 
         $behaviors->add(new ReRoute([
             'user'          => 'notification.user',
             'usergroup'     => 'notification.usergroup'
         ]));
+
+        $behaviors->add(new Binary([
+            'id',
+            'environment_id',
+            'name_checksum',
+            'properties_checksum',
+            'host_id',
+            'checkcommand_id',
+            'check_timeperiod_id',
+            'eventcommand_id',
+            'action_url_id',
+            'notes_url_id',
+            'icon_image_id',
+            'zone_id',
+            'command_endpoint_id'
+        ]));
     }
 
-    /**
-     * Mutates flattened custom vars to an associative array
-     *
-     * @param  Query|ResultSet $_
-     *
-     * @return array
-     */
-    public function mutateVarsProperty($_): array
+    public function createDefaults(Defaults $defaults)
     {
-        if (! $this->customvar_flat instanceof ResultSet) {
-            $this->applyRestrictions($this->customvar_flat);
-        }
+        $defaults->add('vars', function (self $subject) {
+            if (! $subject->customvar_flat instanceof ResultSet) {
+                $this->applyRestrictions($subject->customvar_flat);
+            }
 
-        $vars = [];
-        foreach ($this->customvar_flat as $customVar) {
-            $vars[$customVar->flatname] = $customVar->flatvalue;
-        }
+            $vars = [];
+            foreach ($subject->customvar_flat as $customVar) {
+                $vars[$customVar->flatname] = $customVar->flatvalue;
+            }
 
-        return $vars;
+            return $vars;
+        });
     }
 
     public function createRelations(Relations $relations)
@@ -173,7 +184,7 @@ class Service extends Model
             ->setCandidateKey('notes_url_id')
             ->setForeignKey('id');
         $relations->belongsTo('icon_image', IconImage::class)
-            ->setCandidateKey(['environment_id', 'icon_image_id'])
+            ->setCandidateKey('icon_image_id')
             ->setJoinType('LEFT');
         $relations->belongsTo('zone', Zone::class);
         $relations->belongsTo('endpoint', Endpoint::class)
@@ -183,7 +194,7 @@ class Service extends Model
             ->through(ServiceCustomvar::class);
         $relations->belongsToMany('customvar_flat', CustomvarFlat::class)
             ->through(ServiceCustomvar::class);
-        $relations->belongsToMany('vars', CustomvarFlat::class)
+        $relations->belongsToMany('vars', Vars::class)
             ->through(ServiceCustomvar::class);
         $relations->belongsToMany('servicegroup', Servicegroup::class)
             ->through(ServicegroupMember::class);

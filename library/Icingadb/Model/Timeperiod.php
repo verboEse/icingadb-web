@@ -5,6 +5,7 @@
 namespace Icinga\Module\Icingadb\Model;
 
 use Icinga\Module\Icingadb\Model\Behavior\ReRoute;
+use ipl\Orm\Behavior\Binary;
 use ipl\Orm\Behaviors;
 use ipl\Orm\Model;
 use ipl\Orm\Relations;
@@ -35,17 +36,17 @@ class Timeperiod extends Model
         ];
     }
 
-    public function getMetaData()
+    public function getColumnDefinitions()
     {
         return [
-            'environment_id'        => t('Timeperiod Environment Id'),
+            'environment_id'        => t('Environment Id'),
             'name_checksum'         => t('Timeperiod Name Checksum'),
             'properties_checksum'   => t('Timeperiod Properties Checksum'),
             'name'                  => t('Timeperiod Name'),
             'name_ci'               => t('Timeperiod Name (CI)'),
             'display_name'          => t('Timeperiod Display Name'),
             'prefer_includes'       => t('Timeperiod Prefer Includes'),
-            'zone_id'               => t('Timeperiod Zone Id')
+            'zone_id'               => t('Zone Id')
         ];
     }
 
@@ -54,6 +55,14 @@ class Timeperiod extends Model
         $behaviors->add(new ReRoute([
             'hostgroup'     => 'host.hostgroup',
             'servicegroup'  => 'service.servicegroup'
+        ]));
+
+        $behaviors->add(new Binary([
+            'id',
+            'environment_id',
+            'name_checksum',
+            'properties_checksum',
+            'zone_id'
         ]));
     }
 
@@ -66,7 +75,7 @@ class Timeperiod extends Model
             ->through(TimeperiodCustomvar::class);
         $relations->belongsToMany('customvar_flat', CustomvarFlat::class)
             ->through(TimeperiodCustomvar::class);
-        $relations->belongsToMany('vars', CustomvarFlat::class)
+        $relations->belongsToMany('vars', Vars::class)
             ->through(TimeperiodCustomvar::class);
 
         // TODO: Decide how to establish the override relations

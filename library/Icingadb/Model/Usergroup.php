@@ -5,6 +5,7 @@
 namespace Icinga\Module\Icingadb\Model;
 
 use Icinga\Module\Icingadb\Model\Behavior\ReRoute;
+use ipl\Orm\Behavior\Binary;
 use ipl\Orm\Behaviors;
 use ipl\Orm\Model;
 use ipl\Orm\Relations;
@@ -34,16 +35,16 @@ class Usergroup extends Model
         ];
     }
 
-    public function getMetaData()
+    public function getColumnDefinitions()
     {
         return [
-            'environment_id'        => t('Usergroup Environment Id'),
+            'environment_id'        => t('Environment Id'),
             'name_checksum'         => t('Usergroup Name Checksum'),
             'properties_checksum'   => t('Usergroup Properties Checksum'),
             'name'                  => t('Usergroup Name'),
             'name_ci'               => t('Usergroup Name (CI)'),
             'display_name'          => t('Usergroup Display Name'),
-            'zone_id'               => t('Usergroup Zone Id')
+            'zone_id'               => t('Zone Id')
         ];
     }
 
@@ -65,6 +66,14 @@ class Usergroup extends Model
             'hostgroup'     => 'notification.host.hostgroup',
             'servicegroup'  => 'notification.service.servicegroup'
         ]));
+
+        $behaviors->add(new Binary([
+            'id',
+            'environment_id',
+            'name_checksum',
+            'properties_checksum',
+            'zone_id'
+        ]));
     }
 
     public function createRelations(Relations $relations)
@@ -76,7 +85,7 @@ class Usergroup extends Model
             ->through(UsergroupCustomvar::class);
         $relations->belongsToMany('customvar_flat', CustomvarFlat::class)
             ->through(UsergroupCustomvar::class);
-        $relations->belongsToMany('vars', CustomvarFlat::class)
+        $relations->belongsToMany('vars', Vars::class)
             ->through(UsergroupCustomvar::class);
         $relations->belongsToMany('user', User::class)
             ->through(UsergroupMember::class);

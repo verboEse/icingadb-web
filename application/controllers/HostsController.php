@@ -17,6 +17,7 @@ use Icinga\Module\Icingadb\Widget\Detail\MultiselectQuickActions;
 use Icinga\Module\Icingadb\Widget\Detail\ObjectsDetail;
 use Icinga\Module\Icingadb\Widget\ItemList\HostList;
 use Icinga\Module\Icingadb\Widget\HostStatusBar;
+use Icinga\Module\Icingadb\Widget\ItemTable\HostItemTable;
 use Icinga\Module\Icingadb\Widget\ShowMore;
 use Icinga\Module\Icingadb\Web\Control\ViewModeSwitcher;
 use ipl\Orm\Query;
@@ -32,7 +33,7 @@ class HostsController extends Controller
 
     public function indexAction()
     {
-        $this->setTitle(t('Hosts'));
+        $this->addTitleTab(t('Hosts'));
         $compact = $this->view->compact;
 
         $db = $this->getDb();
@@ -45,7 +46,7 @@ class HostsController extends Controller
 
         $summary = null;
         if (! $compact) {
-            $summary = HoststateSummary::on($db)->with('state');
+            $summary = HoststateSummary::on($db);
         }
 
         $limitControl = $this->createLimitControl();
@@ -60,10 +61,13 @@ class HostsController extends Controller
             ]
         );
         $viewModeSwitcher = $this->createViewModeSwitcher($paginationControl, $limitControl);
+        $columns = $this->createColumnControl($hosts, $viewModeSwitcher);
+
         $searchBar = $this->createSearchBar($hosts, [
             $limitControl->getLimitParam(),
             $sortControl->getSortParam(),
-            $viewModeSwitcher->getViewModeParam()
+            $viewModeSwitcher->getViewModeParam(),
+            'columns'
         ]);
 
         if ($searchBar->hasBeenSent() && ! $searchBar->isValid()) {
@@ -96,8 +100,14 @@ class HostsController extends Controller
         $continueWith = $this->createContinueWith(Links::hostsDetails(), $searchBar);
 
         $results = $hosts->execute();
-        $hostList = (new HostList($results))
-            ->setViewMode($viewModeSwitcher->getViewMode());
+
+        if ($viewModeSwitcher->getViewMode() === 'tabular') {
+            $hostList = (new HostItemTable($results, HostItemTable::applyColumnMetaData($hosts, $columns)))
+                ->setSort($sortControl->getSort());
+        } else {
+            $hostList = (new HostList($results))
+                ->setViewMode($viewModeSwitcher->getViewMode());
+        }
 
         $this->addContent($hostList);
 
@@ -123,7 +133,7 @@ class HostsController extends Controller
 
     public function detailsAction()
     {
-        $this->setTitle(t('Hosts'));
+        $this->addTitleTab(t('Hosts'));
 
         $db = $this->getDb();
 
@@ -187,7 +197,8 @@ class HostsController extends Controller
         $editor = $this->createSearchEditor(Host::on($this->getDb()), [
             LimitControl::DEFAULT_LIMIT_PARAM,
             SortControl::DEFAULT_SORT_PARAM,
-            ViewModeSwitcher::DEFAULT_VIEW_MODE_PARAM
+            ViewModeSwitcher::DEFAULT_VIEW_MODE_PARAM,
+            'columns'
         ]);
 
         $this->getDocument()->add($editor);
@@ -221,7 +232,7 @@ class HostsController extends Controller
 
     protected function getFeatureStatus()
     {
-        $summary = HoststateSummary::on($this->getDb())->with(['state']);
+        $summary = HoststateSummary::on($this->getDb());
         $this->filter($summary);
 
         return new FeatureStatus('host', $summary->first());

@@ -78,7 +78,7 @@ abstract class BaseHistoryListItem extends BaseListItem
                     ->add(sprintf(
                         t('State Change Rate: %.2f%%; Start Threshold: %.2f%%'),
                         $this->item->flapping->percent_state_change_start,
-                        $this->item->host->flapping_threshold_high
+                        $this->item->flapping->flapping_threshold_high
                     ))
                     ->getAttributes()
                     ->add('class', 'plugin-output');
@@ -88,8 +88,8 @@ abstract class BaseHistoryListItem extends BaseListItem
                 $caption
                     ->add(sprintf(
                         t('State Change Rate: %.2f%%; End Threshold: %.2f%%; Flapping for %s'),
-                        $this->item->host->flapping_threshold_low,
-                        $this->item->host->flapping_threshold_high,
+                        $this->item->flapping->percent_state_change_end,
+                        $this->item->flapping->flapping_threshold_low,
                         DateFormatter::formatDuration(
                             $this->item->flapping->end_time - $this->item->flapping->start_time
                         )
@@ -121,8 +121,8 @@ abstract class BaseHistoryListItem extends BaseListItem
                     $caption->addHtml(new PluginOutputContainer(
                         (new PluginOutput($this->item->notification->text))
                             ->setCommandName($this->item->object_type === 'host'
-                                ? $this->item->host->checkcommand
-                                : $this->item->service->checkcommand)
+                                ? $this->item->host->checkcommand_name
+                                : $this->item->service->checkcommand_name)
                     ));
                 }
 
@@ -131,8 +131,8 @@ abstract class BaseHistoryListItem extends BaseListItem
                 $caption->addHtml(new PluginOutputContainer(
                     (new PluginOutput($this->item->state->output))
                         ->setCommandName($this->item->object_type === 'host'
-                            ? $this->item->host->checkcommand
-                            : $this->item->service->checkcommand)
+                            ? $this->item->host->checkcommand_name
+                            : $this->item->service->checkcommand_name)
                 ));
 
                 break;
@@ -196,26 +196,43 @@ abstract class BaseHistoryListItem extends BaseListItem
             case 'state_change':
                 if ($this->item->state->state_type === 'soft') {
                     $stateType = 'soft_state';
+                    $previousStateType = 'previous_soft_state';
+
+                    if ($this->item->state->previous_soft_state === 0) {
+                        $previousStateType = 'hard_state';
+                    }
 
                     $visual->addHtml(new CheckAttempt(
-                        (int) $this->item->state->attempt,
+                        (int) $this->item->state->check_attempt,
                         (int) $this->item->state->max_check_attempts
                     ));
                 } else {
                     $stateType = 'hard_state';
+                    $previousStateType = 'previous_hard_state';
+
+                    if ($this->item->state->hard_state === $this->item->state->previous_hard_state) {
+                        $previousStateType = 'previous_soft_state';
+                    }
                 }
 
                 if ($this->item->object_type === 'host') {
                     $state = HostStates::text($this->item->state->$stateType);
-                    $previousSoftState = HostStates::text($this->item->state->previous_soft_state);
+                    $previousState = HostStates::text($this->item->state->$previousStateType);
                 } else {
                     $state = ServiceStates::text($this->item->state->$stateType);
-                    $previousSoftState = ServiceStates::text($this->item->state->previous_soft_state);
+                    $previousState = ServiceStates::text($this->item->state->$previousStateType);
                 }
 
-                $stateChange = new StateChange($state, $previousSoftState);
+                $stateChange = new StateChange($state, $previousState);
                 if ($stateType === 'soft_state') {
                     $stateChange->setCurrentStateBallSize(StateBall::SIZE_MEDIUM_LARGE);
+                }
+
+                if ($previousStateType === 'previous_soft_state') {
+                    $stateChange->setPreviousStateBallSize(StateBall::SIZE_MEDIUM_LARGE);
+                    if ($stateType === 'soft_state') {
+                        $visual->getAttributes()->add('class', 'small-state-change');
+                    }
                 }
 
                 $visual->prependHtml($stateChange);

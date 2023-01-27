@@ -18,6 +18,7 @@ use Icinga\Module\Icingadb\Web\Controller;
 use Icinga\Module\Icingadb\Widget\Detail\MultiselectQuickActions;
 use Icinga\Module\Icingadb\Widget\Detail\ObjectsDetail;
 use Icinga\Module\Icingadb\Widget\ItemList\ServiceList;
+use Icinga\Module\Icingadb\Widget\ItemTable\ServiceItemTable;
 use Icinga\Module\Icingadb\Widget\ServiceStatusBar;
 use Icinga\Module\Icingadb\Widget\ShowMore;
 use Icinga\Module\Icingadb\Web\Control\ViewModeSwitcher;
@@ -35,7 +36,7 @@ class ServicesController extends Controller
 
     public function indexAction()
     {
-        $this->setTitle(t('Services'));
+        $this->addTitleTab(t('Services'));
         $compact = $this->view->compact;
 
         $db = $this->getDb();
@@ -54,7 +55,7 @@ class ServicesController extends Controller
 
         $summary = null;
         if (! $compact) {
-            $summary = ServicestateSummary::on($db)->with('state');
+            $summary = ServicestateSummary::on($db);
         }
 
         $limitControl = $this->createLimitControl();
@@ -70,10 +71,13 @@ class ServicesController extends Controller
             ]
         );
         $viewModeSwitcher = $this->createViewModeSwitcher($paginationControl, $limitControl);
+        $columns = $this->createColumnControl($services, $viewModeSwitcher);
+
         $searchBar = $this->createSearchBar($services, [
             $limitControl->getLimitParam(),
             $sortControl->getSortParam(),
-            $viewModeSwitcher->getViewModeParam()
+            $viewModeSwitcher->getViewModeParam(),
+            'columns'
         ]);
 
         if ($searchBar->hasBeenSent() && ! $searchBar->isValid()) {
@@ -106,8 +110,14 @@ class ServicesController extends Controller
         $continueWith = $this->createContinueWith(Links::servicesDetails(), $searchBar);
 
         $results = $services->execute();
-        $serviceList = (new ServiceList($results))
-            ->setViewMode($viewModeSwitcher->getViewMode());
+
+        if ($viewModeSwitcher->getViewMode() === 'tabular') {
+            $serviceList = (new ServiceItemTable($results, ServiceItemTable::applyColumnMetaData($services, $columns)))
+                ->setSort($sortControl->getSort());
+        } else {
+            $serviceList = (new ServiceList($results))
+                ->setViewMode($viewModeSwitcher->getViewMode());
+        }
 
         $this->addContent($serviceList);
 
@@ -133,7 +143,7 @@ class ServicesController extends Controller
 
     public function detailsAction()
     {
-        $this->setTitle(t('Services'));
+        $this->addTitleTab(t('Services'));
 
         $db = $this->getDb();
 
@@ -202,7 +212,8 @@ class ServicesController extends Controller
         $editor = $this->createSearchEditor(Service::on($this->getDb()), [
             LimitControl::DEFAULT_LIMIT_PARAM,
             SortControl::DEFAULT_SORT_PARAM,
-            ViewModeSwitcher::DEFAULT_VIEW_MODE_PARAM
+            ViewModeSwitcher::DEFAULT_VIEW_MODE_PARAM,
+            'columns'
         ]);
 
         $this->getDocument()->add($editor);
@@ -212,7 +223,7 @@ class ServicesController extends Controller
     public function gridAction()
     {
         $db = $this->getDb();
-        $this->setTitle(t('Service Grid'));
+        $this->addTitleTab(t('Service Grid'));
 
         $query = Service::on($db)->with([
             'state',
@@ -267,24 +278,24 @@ class ServicesController extends Controller
             'host.id',
             'host_name' => 'host.name',
             'host_display_name' => 'host.display_name',
-            'service_name' => 'service.name',
-            'service_display_name' => 'service.display_name',
-            'service_handled' => 'service.state.is_handled',
-            'service_output' => 'service.state.output',
-            'service_state' => 'service.state.soft_state'
+            'name' => 'service.name',
+            'display_name' => 'service.display_name',
+            'service.state.is_handled',
+            'service.state.output',
+            'service.state.soft_state'
         ];
 
         if ($flipped) {
-            $pivot = (new PivotTable($query, 'host_name', 'service_name', $columns))
+            $pivot = (new PivotTable($query, 'host_name', 'name', $columns))
                 ->setXAxisFilter($pivotFilter)
                 ->setYAxisFilter($pivotFilter ? clone $pivotFilter : null)
                 ->setXAxisHeader('host_display_name')
-                ->setYAxisHeader('service_display_name');
+                ->setYAxisHeader('display_name');
         } else {
-            $pivot = (new PivotTable($query, 'service_name', 'host_name', $columns))
+            $pivot = (new PivotTable($query, 'name', 'host_name', $columns))
                 ->setXAxisFilter($pivotFilter)
                 ->setYAxisFilter($pivotFilter ? clone $pivotFilter : null)
-                ->setXAxisHeader('service_display_name')
+                ->setXAxisHeader('display_name')
                 ->setYAxisHeader('host_display_name');
         }
 
@@ -295,15 +306,39 @@ class ServicesController extends Controller
         $this->view->pivotData = $pivotData;
         $this->view->pivotHeader = $pivotHeader;
 
+        /** Preserve filter and params in view links (the `BaseFilter` implementation for view scripts -.-) */
+        $this->view->baseUrl = $this->getRequest()->getUrl()
+            ->onlyWith([
+                LimitControl::DEFAULT_LIMIT_PARAM,
+                $sortControl->getSortParam(),
+                'flipped',
+                'page',
+                'problems'
+            ]);
+        $preservedParams = $this->view->baseUrl->getParams();
+        $this->view->baseUrl->setQueryString(QueryString::render($filter));
+        foreach ($preservedParams->toArray(false) as $name => $value) {
+            if (is_int($name)) {
+                $name = $value;
+                $value = true;
+            }
+
+            $this->view->baseUrl->getParams()->addEncoded($name, $value);
+        }
+
+        $searchBar->setEditorUrl(Url::fromPath(
+            "icingadb/services/grid-search-editor"
+        )->setParams($preservedParams));
+
         $this->view->controls = $this->controls;
 
         if ($flipped) {
-            $this->render('grid-flipped');
+            $this->getHelper('viewRenderer')->setScriptAction('grid-flipped');
         }
 
         if (! $searchBar->hasBeenSubmitted() && $searchBar->hasBeenSent()) {
             // TODO: Everything up to addContent() (inclusive) can be removed once the grid is a widget
-            $this->view->compact = true; // Relevant controls are transmitted separately
+            $this->view->controls = ''; // Relevant controls are transmitted separately
             $viewRenderer = $this->getHelper('viewRenderer');
             $viewRenderer->postDispatch();
             $viewRenderer->setNoRender(false);
@@ -317,6 +352,24 @@ class ServicesController extends Controller
         }
 
         $this->setAutorefreshInterval(30);
+    }
+
+    public function gridSearchEditorAction()
+    {
+        $editor = $this->createSearchEditor(
+            Service::on($this->getDb()),
+            Url::fromPath('icingadb/services/grid'),
+            [
+                LimitControl::DEFAULT_LIMIT_PARAM,
+                SortControl::DEFAULT_SORT_PARAM,
+                'flipped',
+                'page',
+                'problems'
+            ]
+        );
+
+        $this->getDocument()->add($editor);
+        $this->setTitle(t('Adjust Filter'));
     }
 
     protected function fetchCommandTargets(): Query
@@ -350,7 +403,7 @@ class ServicesController extends Controller
 
     protected function getFeatureStatus()
     {
-        $summary = ServicestateSummary::on($this->getDb())->with(['state']);
+        $summary = ServicestateSummary::on($this->getDb());
         $this->filter($summary);
 
         return new FeatureStatus('service', $summary->first());

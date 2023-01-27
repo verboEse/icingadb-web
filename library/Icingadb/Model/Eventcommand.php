@@ -5,6 +5,7 @@
 namespace Icinga\Module\Icingadb\Model;
 
 use Icinga\Module\Icingadb\Model\Behavior\ReRoute;
+use ipl\Orm\Behavior\Binary;
 use ipl\Orm\Behaviors;
 use ipl\Orm\Model;
 use ipl\Orm\Relations;
@@ -35,11 +36,11 @@ class Eventcommand extends Model
         ];
     }
 
-    public function getMetaData()
+    public function getColumnDefinitions()
     {
         return [
-            'zone_id'               => t('Eventcommand Zone Id'),
-            'environment_id'        => t('Eventcommand Environment id'),
+            'zone_id'               => t('Zone Id'),
+            'environment_id'        => t('Environment Id'),
             'name_checksum'         => t('Eventcommand Name Checksum'),
             'properties_checksum'   => t('Eventcommand Properties Checksum'),
             'name'                  => t('Eventcommand Name'),
@@ -55,6 +56,14 @@ class Eventcommand extends Model
             'hostgroup'     => 'host.hostgroup',
             'servicegroup'  => 'service.servicegroup'
         ]));
+
+        $behaviors->add(new Binary([
+            'id',
+            'zone_id',
+            'environment_id',
+            'name_checksum',
+            'properties_checksum'
+        ]));
     }
 
     public function createRelations(Relations $relations)
@@ -66,7 +75,7 @@ class Eventcommand extends Model
             ->through(EventcommandCustomvar::class);
         $relations->belongsToMany('customvar_flat', CustomvarFlat::class)
             ->through(EventcommandCustomvar::class);
-        $relations->belongsToMany('vars', CustomvarFlat::class)
+        $relations->belongsToMany('vars', Vars::class)
             ->through(EventcommandCustomvar::class);
 
         $relations->hasMany('argument', EventcommandArgument::class);

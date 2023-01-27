@@ -4,6 +4,8 @@
 
 namespace Icinga\Module\Icingadb\Model;
 
+use ipl\Orm\Behavior\Binary;
+use ipl\Orm\Behaviors;
 use ipl\Orm\Model;
 use ipl\Orm\Relations;
 
@@ -16,7 +18,7 @@ class IconImage extends Model
 
     public function getKeyName()
     {
-        return ['environment_id', 'id'];
+        return 'id';
     }
 
     public function getColumns()
@@ -27,12 +29,20 @@ class IconImage extends Model
         ];
     }
 
-    public function getMetaData()
+    public function getColumnDefinitions()
     {
         return [
             'icon_image'        => t('Icon Image'),
-            'environment_id'    => t('Icon Image Environment Id')
+            'environment_id'    => t('Environment Id')
         ];
+    }
+
+    public function createBehaviors(Behaviors $behaviors)
+    {
+        $behaviors->add(new Binary([
+            'id',
+            'environment_id'
+        ]));
     }
 
     public function createRelations(Relations $relations)

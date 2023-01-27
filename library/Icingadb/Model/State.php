@@ -6,6 +6,7 @@ namespace Icinga\Module\Icingadb\Model;
 
 use Icinga\Module\Icingadb\Model\Behavior\BoolCast;
 use Icinga\Module\Icingadb\Model\Behavior\Timestamp;
+use ipl\Orm\Behavior\Binary;
 use ipl\Orm\Behaviors;
 use ipl\Orm\Model;
 
@@ -21,8 +22,9 @@ abstract class State extends Model
             'state_type',
             'soft_state',
             'hard_state',
+            'previous_soft_state',
             'previous_hard_state',
-            'attempt',
+            'check_attempt',
             'severity',
             'output',
             'long_output',
@@ -40,7 +42,7 @@ abstract class State extends Model
             'in_downtime',
             'execution_time',
             'latency',
-            'timeout',
+            'check_timeout',
             'check_source',
             'scheduling_source',
             'last_update',
@@ -61,6 +63,7 @@ abstract class State extends Model
             'is_acknowledged',
             'in_downtime'
         ]));
+
         $behaviors->add(new Timestamp([
             'execution_time',
             'latency',
@@ -68,6 +71,13 @@ abstract class State extends Model
             'last_state_change',
             'next_check',
             'next_update'
+        ]));
+
+        $behaviors->add(new Binary([
+            $this->getKeyName(),
+            'environment_id',
+            'acknowledgement_comment_id',
+            'last_comment_id'
         ]));
     }
 }

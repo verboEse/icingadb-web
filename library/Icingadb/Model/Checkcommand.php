@@ -5,6 +5,7 @@
 namespace Icinga\Module\Icingadb\Model;
 
 use Icinga\Module\Icingadb\Model\Behavior\ReRoute;
+use ipl\Orm\Behavior\Binary;
 use ipl\Orm\Behaviors;
 use ipl\Orm\Model;
 use ipl\Orm\Relations;
@@ -35,11 +36,11 @@ class Checkcommand extends Model
         ];
     }
 
-    public function getMetaData()
+    public function getColumnDefinitions()
     {
         return [
-            'zone_id'               => t('Checkcommand Zone Id'),
-            'environment_id'        => t('Checkcommand Environment Id'),
+            'zone_id'               => t('Zone Id'),
+            'environment_id'        => t('Environment Id'),
             'name_checksum'         => t('Checkcommand Name Checksum'),
             'properties_checksum'   => t('Checkcommand Properties Checksum'),
             'name'                  => t('Checkcommand Name'),
@@ -55,6 +56,14 @@ class Checkcommand extends Model
             'hostgroup'     => 'host.hostgroup',
             'servicegroup'  => 'service.servicegroup'
         ]));
+
+        $behaviors->add(new Binary([
+            'id',
+            'zone_id',
+            'environment_id',
+            'name_checksum',
+            'properties_checksum'
+        ]));
     }
 
     public function createRelations(Relations $relations)
@@ -66,7 +75,7 @@ class Checkcommand extends Model
             ->through(CheckcommandCustomvar::class);
         $relations->belongsToMany('customvar_flat', CustomvarFlat::class)
             ->through(CheckcommandCustomvar::class);
-        $relations->belongsToMany('vars', CustomvarFlat::class)
+        $relations->belongsToMany('vars', Vars::class)
             ->through(CheckcommandCustomvar::class);
 
         $relations->hasMany('argument', CheckcommandArgument::class);

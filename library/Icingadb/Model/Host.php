@@ -7,9 +7,10 @@ namespace Icinga\Module\Icingadb\Model;
 use Icinga\Module\Icingadb\Common\Auth;
 use Icinga\Module\Icingadb\Model\Behavior\BoolCast;
 use Icinga\Module\Icingadb\Model\Behavior\ReRoute;
+use ipl\Orm\Behavior\Binary;
 use ipl\Orm\Behaviors;
+use ipl\Orm\Defaults;
 use ipl\Orm\Model;
-use ipl\Orm\Query;
 use ipl\Orm\Relations;
 use ipl\Orm\ResultSet;
 
@@ -19,8 +20,6 @@ use ipl\Orm\ResultSet;
 class Host extends Model
 {
     use Auth;
-
-    protected $accessorsAndMutatorsEnabled = true;
 
     public function getTableName()
     {
@@ -45,10 +44,10 @@ class Host extends Model
             'address6',
             'address_bin',
             'address6_bin',
-            'checkcommand',
+            'checkcommand_name',
             'checkcommand_id',
             'max_check_attempts',
-            'check_timeperiod',
+            'check_timeperiod_name',
             'check_timeperiod_id',
             'check_timeout',
             'check_interval',
@@ -61,7 +60,7 @@ class Host extends Model
             'flapping_threshold_low',
             'flapping_threshold_high',
             'perfdata_enabled',
-            'eventcommand',
+            'eventcommand_name',
             'eventcommand_id',
             'is_volatile',
             'action_url_id',
@@ -69,17 +68,17 @@ class Host extends Model
             'notes',
             'icon_image_id',
             'icon_image_alt',
-            'zone',
+            'zone_name',
             'zone_id',
-            'command_endpoint',
+            'command_endpoint_name',
             'command_endpoint_id'
         ];
     }
 
-    public function getMetaData()
+    public function getColumnDefinitions()
     {
         return [
-            'environment_id'            => t('Host Environment Id'),
+            'environment_id'            => t('Environment Id'),
             'name_checksum'             => t('Host Name Checksum'),
             'properties_checksum'       => t('Host Properties Checksum'),
             'name'                      => t('Host Name'),
@@ -89,11 +88,11 @@ class Host extends Model
             'address6'                  => t('Host Address (IPv6)'),
             'address_bin'               => t('Host Address (IPv4, Binary)'),
             'address6_bin'              => t('Host Address (IPv6, Binary)'),
-            'checkcommand'              => t('Host Checkcommand'),
-            'checkcommand_id'           => t('Host Checkcommand Id'),
+            'checkcommand_name'         => t('Checkcommand Name'),
+            'checkcommand_id'           => t('Checkcommand Id'),
             'max_check_attempts'        => t('Host Max Check Attempts'),
-            'check_timeperiod'          => t('Host Check Timeperiod'),
-            'check_timeperiod_id'       => t('Host Check Timeperiod Id'),
+            'check_timeperiod_name'     => t('Check Timeperiod Name'),
+            'check_timeperiod_id'       => t('Check Timeperiod Id'),
             'check_timeout'             => t('Host Check Timeout'),
             'check_interval'            => t('Host Check Interval'),
             'check_retry_interval'      => t('Host Check Retry Inverval'),
@@ -105,18 +104,18 @@ class Host extends Model
             'flapping_threshold_low'    => t('Host Flapping Threshold Low'),
             'flapping_threshold_high'   => t('Host Flapping Threshold High'),
             'perfdata_enabled'          => t('Host Performance Data Enabled'),
-            'eventcommand'              => t('Host Eventcommand'),
-            'eventcommand_id'           => t('Host Eventcommand Id'),
+            'eventcommand_name'         => t('Eventcommand Name'),
+            'eventcommand_id'           => t('Eventcommand Id'),
             'is_volatile'               => t('Host Is Volatile'),
-            'action_url_id'             => t('Host Action Url Id'),
-            'notes_url_id'              => t('Host Notes Url Id'),
+            'action_url_id'             => t('Action Url Id'),
+            'notes_url_id'              => t('Notes Url Id'),
             'notes'                     => t('Host Notes'),
-            'icon_image_id'             => t('Host Icon Image Id'),
-            'icon_image_alt'            => t('Host Icon Image Alt'),
-            'zone'                      => t('Host Zone'),
-            'zone_id'                   => t('Host Zone Id'),
-            'command_endpoint'          => t('Host Command Endpoint'),
-            'command_endpoint_id'       => t('Host Command Endpoint Id')
+            'icon_image_id'             => t('Icon Image Id'),
+            'icon_image_alt'            => t('Icon Image Alt'),
+            'zone_name'                 => t('Zone Name'),
+            'zone_id'                   => t('Zone Id'),
+            'command_endpoint_name'     => t('Endpoint Name'),
+            'command_endpoint_id'       => t('Endpoint Id')
         ];
     }
 
@@ -137,7 +136,8 @@ class Host extends Model
             'passive_checks_enabled',
             'event_handler_enabled',
             'notifications_enabled',
-            'flapping_enabled'
+            'flapping_enabled',
+            'is_volatile'
         ]));
 
         $behaviors->add(new ReRoute([
@@ -145,27 +145,39 @@ class Host extends Model
             'user'          => 'notification.user',
             'usergroup'     => 'notification.usergroup'
         ]));
+
+        $behaviors->add(new Binary([
+            'id',
+            'environment_id',
+            'name_checksum',
+            'properties_checksum',
+            'address_bin',
+            'address6_bin',
+            'checkcommand_id',
+            'check_timeperiod_id',
+            'eventcommand_id',
+            'action_url_id',
+            'notes_url_id',
+            'icon_image_id',
+            'zone_id',
+            'command_endpoint_id'
+        ]));
     }
 
-    /**
-     * Mutates flattened custom vars to an associative array
-     *
-     * @param  Query|ResultSet $_
-     *
-     * @return array
-     */
-    public function mutateVarsProperty($_): array
+    public function createDefaults(Defaults $defaults)
     {
-        if (! $this->customvar_flat instanceof ResultSet) {
-            $this->applyRestrictions($this->customvar_flat);
-        }
+        $defaults->add('vars', function (self $subject) {
+            if (! $subject->customvar_flat instanceof ResultSet) {
+                $this->applyRestrictions($subject->customvar_flat);
+            }
 
-        $vars = [];
-        foreach ($this->customvar_flat as $customVar) {
-            $vars[$customVar->flatname] = $customVar->flatvalue;
-        }
+            $vars = [];
+            foreach ($subject->customvar_flat as $customVar) {
+                $vars[$customVar->flatname] = $customVar->flatvalue;
+            }
 
-        return $vars;
+            return $vars;
+        });
     }
 
     public function createRelations(Relations $relations)
@@ -182,7 +194,7 @@ class Host extends Model
             ->setCandidateKey('notes_url_id')
             ->setForeignKey('id');
         $relations->belongsTo('icon_image', IconImage::class)
-            ->setCandidateKey(['environment_id', 'icon_image_id'])
+            ->setCandidateKey('icon_image_id')
             ->setJoinType('LEFT');
         $relations->belongsTo('zone', Zone::class);
         $relations->belongsTo('endpoint', Endpoint::class)
@@ -192,7 +204,7 @@ class Host extends Model
             ->through(HostCustomvar::class);
         $relations->belongsToMany('customvar_flat', CustomvarFlat::class)
             ->through(HostCustomvar::class);
-        $relations->belongsToMany('vars', CustomvarFlat::class)
+        $relations->belongsToMany('vars', Vars::class)
             ->through(HostCustomvar::class);
         $relations->belongsToMany('hostgroup', Hostgroup::class)
             ->through(HostgroupMember::class);

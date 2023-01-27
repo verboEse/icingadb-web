@@ -10,6 +10,7 @@ use Icinga\Module\Icingadb\Common\Links;
 use Icinga\Module\Icingadb\Hook\ExtensionHook\ObjectDetailExtensionHook;
 use Icinga\Module\Icingadb\Model\User;
 use Icinga\Module\Icingadb\Widget\EmptyState;
+use ipl\Html\Attributes;
 use ipl\Web\Widget\HorizontalKeyValue;
 use Icinga\Module\Icingadb\Widget\ItemList\UsergroupList;
 use Icinga\Module\Icingadb\Widget\ShowMore;
@@ -42,9 +43,11 @@ class UserDetail extends BaseHtmlElement
 
         $vars = $this->user->customvar_flat->getModel()->unflattenVars($flattenedVars);
         if (! empty($vars)) {
-            $customvarTable = new CustomVarTable($vars);
-            $customvarTable->setAttribute('id', 'user-customvars');
-            $content[] = $customvarTable;
+            $content[] = new HtmlElement('div', Attributes::create([
+                'id' => 'user-customvars',
+                'class' => 'collapsible',
+                'data-visible-height' => 200
+            ]), new CustomVarTable($vars, $this->user));
         } else {
             $content[] = new EmptyState(t('No custom variables configured.'));
         }
@@ -61,6 +64,7 @@ class UserDetail extends BaseHtmlElement
 
         return [
             new HtmlElement('h2', null, Text::create(t('Details'))),
+            new HorizontalKeyValue(t('Name'), $this->user->name),
             new HorizontalKeyValue(t('E-Mail'), $this->user->email ?: new EmptyState(t('None', 'address'))),
             new HorizontalKeyValue(t('Pager'), $this->user->pager ?: new EmptyState(t('None', 'phone-number'))),
             new HorizontalKeyValue(t('Host States'), $hostStates ?: t('All')),

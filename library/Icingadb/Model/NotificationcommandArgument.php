@@ -4,6 +4,8 @@
 
 namespace Icinga\Module\Icingadb\Model;
 
+use ipl\Orm\Behavior\Binary;
+use ipl\Orm\Behaviors;
 use ipl\Orm\Model;
 use ipl\Orm\Relations;
 
@@ -37,22 +39,32 @@ class NotificationcommandArgument extends Model
         ];
     }
 
-    public function getMetaData()
+    public function getColumnDefinitions()
     {
         return [
-            'notificationcommand_id' => t('Notificationcommand Argument Command Id'),
-            'argument_key'           => t('Notificationcommand Argument Key'),
-            'environment_id'         => t('Notificationcommand Argument Environment Id'),
+            'notificationcommand_id' => t('Notificationcommand Id'),
+            'argument_key'           => t('Notificationcommand Argument Name'),
+            'environment_id'         => t('Environment Id'),
             'properties_checksum'    => t('Notificationcommand Argument Properties Checksum'),
             'argument_value'         => t('Notificationcommand Argument Value'),
-            'argument_order'         => t('Notificationcommand Argument Order'),
+            'argument_order'         => t('Notificationcommand Argument Position'),
             'description'            => t('Notificationcommand Argument Description'),
-            'argument_key_override'  => t('Notificationcommand Argument Key Override'),
-            'repeat_key'             => t('Notificationcommand Argument Repeat Key'),
+            'argument_key_override'  => t('Notificationcommand Argument Actual Name'),
+            'repeat_key'             => t('Notificationcommand Argument Repeated'),
             'required'               => t('Notificationcommand Argument Required'),
-            'set_if'                 => t('Notificationcommand Argument Set If'),
-            'skip_key'               => t('Notificationcommand Argument Skip Key')
+            'set_if'                 => t('Notificationcommand Argument Condition'),
+            'skip_key'               => t('Notificationcommand Argument Without Name')
         ];
+    }
+
+    public function createBehaviors(Behaviors $behaviors)
+    {
+        $behaviors->add(new Binary([
+            'id',
+            'notificationcommand_id',
+            'environment_id',
+            'properties_checksum'
+        ]));
     }
 
     public function createRelations(Relations $relations)

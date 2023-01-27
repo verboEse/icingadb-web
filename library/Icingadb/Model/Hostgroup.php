@@ -5,6 +5,7 @@
 namespace Icinga\Module\Icingadb\Model;
 
 use Icinga\Module\Icingadb\Model\Behavior\ReRoute;
+use ipl\Orm\Behavior\Binary;
 use ipl\Orm\Behaviors;
 use ipl\Orm\Model;
 use ipl\Orm\Relations;
@@ -34,16 +35,16 @@ class Hostgroup extends Model
         ];
     }
 
-    public function getMetaData()
+    public function getColumnDefinitions()
     {
         return [
-            'environment_id'        => t('Hostgroup Environment Id'),
+            'environment_id'        => t('Environment Id'),
             'name_checksum'         => t('Hostgroup Name Checksum'),
             'properties_checksum'   => t('Hostgroup Properties Checksum'),
             'name'                  => t('Hostgroup Name'),
             'name_ci'               => t('Hostgroup Name (CI)'),
             'display_name'          => t('Hostgroup Display Name'),
-            'zone_id'               => t('Hostgroup Zone Id')
+            'zone_id'               => t('Zone Id')
         ];
     }
 
@@ -62,6 +63,14 @@ class Hostgroup extends Model
         $behaviors->add(new ReRoute([
             'servicegroup'  => 'service.servicegroup'
         ]));
+
+        $behaviors->add(new Binary([
+            'id',
+            'environment_id',
+            'name_checksum',
+            'properties_checksum',
+            'zone_id'
+        ]));
     }
 
     public function createRelations(Relations $relations)
@@ -73,7 +82,7 @@ class Hostgroup extends Model
             ->through(HostgroupCustomvar::class);
         $relations->belongsToMany('customvar_flat', CustomvarFlat::class)
             ->through(HostgroupCustomvar::class);
-        $relations->belongsToMany('vars', CustomvarFlat::class)
+        $relations->belongsToMany('vars', Vars::class)
             ->through(HostgroupCustomvar::class);
         $relations->belongsToMany('host', Host::class)
             ->through(HostgroupMember::class);

@@ -4,6 +4,8 @@
 
 namespace Icinga\Module\Icingadb\Model;
 
+use ipl\Orm\Behavior\Binary;
+use ipl\Orm\Behaviors;
 use ipl\Orm\Model;
 use ipl\Orm\Relations;
 
@@ -30,15 +32,25 @@ class NotificationcommandEnvvar extends Model
         ];
     }
 
-    public function getMetaData()
+    public function getColumnDefinitions()
     {
         return [
-            'notificationcommand_id' => t('Notificationcommand Envvar Command Id'),
+            'notificationcommand_id' => t('Notificationcommand Id'),
             'envvar_key'             => t('Notificationcommand Envvar Key'),
-            'environment_id'         => t('Notificationcommand Envvar Environment Id'),
+            'environment_id'         => t('Environment Id'),
             'properties_checksum'    => t('Notificationcommand Envvar Properties Checksum'),
             'envvar_value'           => t('Notificationcommand Envvar Value')
         ];
+    }
+
+    public function createBehaviors(Behaviors $behaviors)
+    {
+        $behaviors->add(new Binary([
+            'id',
+            'notificationcommand_id',
+            'environment_id',
+            'properties_checksum',
+        ]));
     }
 
     public function createRelations(Relations $relations)

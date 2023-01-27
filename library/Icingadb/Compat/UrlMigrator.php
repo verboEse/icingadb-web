@@ -23,6 +23,7 @@ class UrlMigrator
         'monitoring/host/services' => ['host', 'icingadb/host/services'],
         'monitoring/host/history' => ['host', 'icingadb/host/history'],
         'monitoring/list/services' => ['services', 'icingadb/services'],
+        'monitoring/list/servicegrid' => ['servicegrid', 'icingadb/services/grid'],
         'monitoring/services/show' => ['multipleServices', 'icingadb/services/details'],
         'monitoring/service/show' => ['service', 'icingadb/service'],
         'monitoring/service/history' => ['service', 'icingadb/service/history'],
@@ -245,6 +246,35 @@ class UrlMigrator
     {
         return [
 
+            // Extraordinary columns
+            'addColumns' => function ($filter) {
+                /** @var Filter\Condition $filter */
+                $legacyColumns = array_filter(array_map('trim', explode(',', $filter->getValue())));
+
+                $columns = [
+                    'host.state.soft_state',
+                    'host.state.last_state_change',
+                    'host.icon_image.icon_image',
+                    'host.display_name',
+                    'host.state.output',
+                    'host.state.performance_data',
+                    'host.state.is_problem'
+                ];
+                foreach ($legacyColumns as $column) {
+                    if (($c = self::transformFilter(Filter::equal($column, 'bogus'), 'hosts')) !== false) {
+                        if ($c instanceof Filter\Condition) {
+                            $columns[] = $c->getColumn();
+                        }
+                    }
+                }
+
+                if (empty($columns)) {
+                    return false;
+                }
+
+                return Filter::equal('columns', implode(',', $columns));
+            },
+
             // Query columns
             'host_acknowledged' => [
                 'host.state.is_acknowledged' => self::NO_YES
@@ -267,7 +297,7 @@ class UrlMigrator
             ],
             'host_alias' => self::DROP,
             'host_check_command' => [
-                'host.checkcommand' => self::USE_EXPR
+                'host.checkcommand_name' => self::USE_EXPR
             ],
             'host_check_execution_time' => [
                 'host.state.execution_time' => self::USE_EXPR
@@ -279,10 +309,10 @@ class UrlMigrator
                 'host.state.check_source' => self::USE_EXPR
             ],
             'host_check_timeperiod' => [
-                'host.check_timeperiod' => self::USE_EXPR
+                'host.check_timeperiod_name' => self::USE_EXPR
             ],
             'host_current_check_attempt' => [
-                'host.state.attempt' => self::USE_EXPR
+                'host.state.check_attempt' => self::USE_EXPR
             ],
             'host_current_notification_number' => self::DROP,
             'host_display_name' => [
@@ -446,6 +476,36 @@ class UrlMigrator
     {
         return [
 
+            // Extraordinary columns
+            'addColumns' => function ($filter) {
+                /** @var Filter\Condition $filter */
+                $legacyColumns = array_filter(array_map('trim', explode(',', $filter->getValue())));
+
+                $columns = [
+                    'service.state.soft_state',
+                    'service.state.last_state_change',
+                    'service.icon_image.icon_image',
+                    'service.display_name',
+                    'service.host.display_name',
+                    'service.state.output',
+                    'service.state.performance_data',
+                    'service.state.is_problem'
+                ];
+                foreach ($legacyColumns as $column) {
+                    if (($c = self::transformFilter(Filter::equal($column, 'bogus'), 'services')) !== false) {
+                        if ($c instanceof Filter\Condition) {
+                            $columns[] = $c->getColumn();
+                        }
+                    }
+                }
+
+                if (empty($columns)) {
+                    return false;
+                }
+
+                return Filter::equal('columns', implode(',', $columns));
+            },
+
             // Query columns
             'host_acknowledged' => [
                 'host.state.is_acknowledged' => self::NO_YES
@@ -542,19 +602,19 @@ class UrlMigrator
             ],
             'service_active_checks_enabled_changed' => self::DROP,
             'service_attempt' => [
-                'service.state.attempt' => self::USE_EXPR
+                'service.state.check_attempt' => self::USE_EXPR
             ],
             'service_check_command' => [
-                'service.checkcommand' => self::USE_EXPR
+                'service.checkcommand_name' => self::USE_EXPR
             ],
             'service_check_source' => [
                 'service.state.check_source' => self::USE_EXPR
             ],
             'service_check_timeperiod' => [
-                'service.check_timeperiod' => self::USE_EXPR
+                'service.check_timeperiod_name' => self::USE_EXPR
             ],
             'service_current_check_attempt' => [
-                'service.state.attempt' => self::USE_EXPR
+                'service.state.check_attempt' => self::USE_EXPR
             ],
             'service_current_notification_number' => self::DROP,
             'service_display_name' => [
@@ -742,6 +802,18 @@ class UrlMigrator
         ];
     }
 
+    protected static function servicegridColumns(): array
+    {
+        return array_merge(
+            static::servicesColumns(),
+            [
+                'problems' => [
+                    'problems' => self::USE_EXPR
+                ]
+            ]
+        );
+    }
+
     protected static function multipleServicesColumns(): array
     {
         return array_merge(
@@ -843,7 +915,7 @@ class UrlMigrator
         $receivesStateNotifications = function ($state, $type = null) {
             return function ($filter) use ($state, $type) {
                 /** @var Filter\Condition $filter */
-                $negate = $filter instanceof Filter\Unequal;
+                $negate = $filter instanceof Filter\Unequal || $filter instanceof Filter\Unlike;
                 switch ($filter->getValue()) {
                     case '0':
                         $filter = Filter::any(

@@ -6,6 +6,7 @@ namespace Icinga\Module\Icingadb\Model;
 
 use Icinga\Module\Icingadb\Model\Behavior\Bitmask;
 use Icinga\Module\Icingadb\Model\Behavior\ReRoute;
+use ipl\Orm\Behavior\Binary;
 use ipl\Orm\Behaviors;
 use ipl\Orm\Model;
 use ipl\Orm\Relations;
@@ -41,10 +42,10 @@ class User extends Model
         ];
     }
 
-    public function getMetaData()
+    public function getColumnDefinitions()
     {
         return [
-            'environment_id'        => t('User Environment Id'),
+            'environment_id'        => t('Environment Id'),
             'name_checksum'         => t('User Name Checksum'),
             'properties_checksum'   => t('User Properties Checksum'),
             'name'                  => t('User Name'),
@@ -53,10 +54,10 @@ class User extends Model
             'email'                 => t('User Email'),
             'pager'                 => t('User Pager'),
             'notifications_enabled' => t('User Receives Notifications'),
-            'timeperiod_id'         => t('User Timeperiod Id'),
-            'states'                => t('User States'),
-            'types'                 => t('User Types'),
-            'zone_id'               => t('User Zone Id')
+            'timeperiod_id'         => t('Timeperiod Id'),
+            'states'                => t('Notification State Filter'),
+            'types'                 => t('Notification Type Filter'),
+            'zone_id'               => t('Zone Id')
         ];
     }
 
@@ -78,6 +79,7 @@ class User extends Model
             'hostgroup'     => 'notification.host.hostgroup',
             'servicegroup'  => 'notification.service.servicegroup'
         ]));
+
         $behaviors->add(new Bitmask([
             'states' => [
                 'ok'        => 1,
@@ -99,6 +101,15 @@ class User extends Model
                 'flapping_end'      => 256
             ]
         ]));
+
+        $behaviors->add(new Binary([
+            'id',
+            'environment_id',
+            'name_checksum',
+            'properties_checksum',
+            'timeperiod_id',
+            'zone_id'
+        ]));
     }
 
     public function createRelations(Relations $relations)
@@ -111,7 +122,7 @@ class User extends Model
             ->through(UserCustomvar::class);
         $relations->belongsToMany('customvar_flat', CustomvarFlat::class)
             ->through(UserCustomvar::class);
-        $relations->belongsToMany('vars', CustomvarFlat::class)
+        $relations->belongsToMany('vars', Vars::class)
             ->through(UserCustomvar::class);
         $relations->belongsToMany('notification', Notification::class)
             ->through('notification_recipient');

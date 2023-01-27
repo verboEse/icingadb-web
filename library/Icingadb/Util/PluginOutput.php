@@ -134,7 +134,7 @@ class PluginOutput extends HtmlString
         }
 
         return (new static($object->state->output . "\n" . $object->state->long_output))
-            ->setCommandName($object->checkcommand);
+            ->setCommandName($object->checkcommand_name);
     }
 
     public function render()
@@ -154,11 +154,11 @@ class PluginOutput extends HtmlString
 
         if (preg_match('~<\w+(?>\s\w+=[^>]*)?>~', $output)) {
             // HTML
-            $output = preg_replace(
+            $output = HtmlPurifier::process(preg_replace(
                 self::HTML_PATTERNS,
                 self::HTML_REPLACEMENTS,
-                HtmlPurifier::process($output)
-            );
+                $output
+            ));
             $this->isHtml = true;
         } else {
             // Plaintext

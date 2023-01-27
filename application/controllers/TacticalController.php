@@ -19,13 +19,12 @@ class TacticalController extends Controller
 {
     public function indexAction()
     {
-        $this->setTitle(t('Tactical Overview'));
+        $this->addTitleTab(t('Tactical Overview'));
 
         $db = $this->getDb();
 
-        $hoststateSummary = HoststateSummary::on($db)->with('state');
-        // With relation `host` because otherwise the filter editor only presents service cols
-        $servicestateSummary = ServicestateSummary::on($db)->with(['state', 'host']);
+        $hoststateSummary = HoststateSummary::on($db);
+        $servicestateSummary = ServicestateSummary::on($db);
 
         $this->handleSearchRequest($servicestateSummary);
 

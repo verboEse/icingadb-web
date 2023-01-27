@@ -14,6 +14,11 @@
   }
 }
 
+& > .content.full-height {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
 .plugin-output {
   .monospace();
   word-break: break-word;
@@ -79,6 +84,7 @@ div.show-more {
   .box-shadow(0, 0, 0, 1px, @gray-lighter);
   flex-shrink: 0;
   position: relative; // Required for the host meta info control
+  z-index: 1; // The content may clip, this ensures the separator is always visible
 
   > :not(:only-child) {
     margin-bottom: .5em;
@@ -179,6 +185,10 @@ div.show-more {
   .show-more {
     margin-top: .25em;
   }
+
+  .notice {
+    display: none;
+  }
 }
 
 .content > h2:first-child,
@@ -238,23 +248,10 @@ div.show-more {
   }
 }
 
-.comment-detail > :not(:first-child) {
-  margin-top: 1em;
-}
-
-.comment-detail button,
-.downtime-detail button {
-  .button();
-
-  background: @body-bg-color;
-  border: 1px solid;
-  border-color: @color-critical;
-  color: @color-critical;
-
-  &:hover,
-  &:focus {
-    background-color: @color-critical;
-    color: @text-color-on-icinga-blue;
+.comment-detail {
+  > form,
+  > h2:not(:first-child) {
+    margin-top: 1em;
   }
 }
 
@@ -342,9 +339,15 @@ div.show-more {
   padding-right: .25em;
 }
 
+.history-list,
+.objectHeader {
+  .visual.small-state-change .state-change {
+    padding-top: .25em;
+  }
+}
+
 .comment-popup {
   .comment-list .main {
-    border: none;
     // This is necessary to limit the visible comment lines
     // because the popup is shown in detailed list mode only
     .caption {

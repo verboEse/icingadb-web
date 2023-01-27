@@ -4,6 +4,8 @@
 
 namespace Icinga\Module\Icingadb\Model;
 
+use ipl\Orm\Behavior\Binary;
+use ipl\Orm\Behaviors;
 use ipl\Orm\Model;
 use ipl\Orm\Relations;
 
@@ -29,14 +31,23 @@ class TimeperiodRange extends Model
         ];
     }
 
-    public function getMetaData()
+    public function getColumnDefinitions()
     {
         return [
-            'timeperiod_id'     => t('Timeperiod Range Period Id'),
-            'range_key'         => t('Timeperiod Range Key'),
-            'environment_id'    => t('Timeperiod Range Environment Id'),
-            'range_value'       => t('Timeperiod Range Value')
+            'timeperiod_id'     => t('Timeperiod Id'),
+            'range_key'         => t('Timeperiod Range Date(s)/Day'),
+            'environment_id'    => t('Environment Id'),
+            'range_value'       => t('Timeperiod Range Time')
         ];
+    }
+
+    public function createBehaviors(Behaviors $behaviors)
+    {
+        $behaviors->add(new Binary([
+            'id',
+            'timeperiod_id',
+            'environment_id'
+        ]));
     }
 
     public function createRelations(Relations $relations)

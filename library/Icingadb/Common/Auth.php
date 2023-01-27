@@ -37,11 +37,11 @@ trait Auth
         }
 
         // The empty array is for PHP pre 7.4, older versions require at least a single param for array_merge
-        $routeBlacklist = array_flip(array_merge([], ...array_map(function ($restriction) {
+        $routeDenylist = array_flip(array_merge([], ...array_map(function ($restriction) {
             return StringHelper::trimSplit($restriction);
-        }, $this->getAuth()->getRestrictions('icingadb/blacklist/routes'))));
+        }, $this->getAuth()->getRestrictions('icingadb/denylist/routes'))));
 
-        return ! array_key_exists($name, $routeBlacklist);
+        return ! array_key_exists($name, $routeDenylist);
     }
 
     /**
@@ -105,7 +105,7 @@ trait Auth
      * This will apply `icingadb/filter/objects` in any case. `icingadb/filter/services` is only
      * applied to queries fetching services and `icingadb/filter/hosts` is applied to queries
      * fetching either hosts or services. It also applies custom variable restrictions and
-     * obfuscations. (`icingadb/blacklist/variables` and `icingadb/protect/variables`)
+     * obfuscations. (`icingadb/denylist/variables` and `icingadb/protect/variables`)
      *
      * @param Query $query
      *
@@ -123,6 +123,7 @@ trait Auth
             $queries = [$query];
         }
 
+        $orgQuery = $query;
         foreach ($queries as $query) {
             $relations = [$query->getModel()->getTableName()];
             foreach ($query->getWith() as $relationPath => $relation) {
@@ -144,8 +145,8 @@ trait Auth
                 $roleFilter = Filter::all();
 
                 if ($customVarRelationName !== false) {
-                    if (($restriction = $role->getRestrictions('icingadb/blacklist/variables'))) {
-                        $roleFilter->add($this->parseBlacklist(
+                    if (($restriction = $role->getRestrictions('icingadb/denylist/variables'))) {
+                        $roleFilter->add($this->parseDenylist(
                             $restriction,
                             $customVarRelationName
                                 ? $resolver->qualifyColumn('flatname', $customVarRelationName)
@@ -154,7 +155,7 @@ trait Auth
                     }
 
                     if (($restriction = $role->getRestrictions('icingadb/protect/variables'))) {
-                        $obfuscationRules->add($this->parseBlacklist(
+                        $obfuscationRules->add($this->parseDenylist(
                             $restriction,
                             $customVarRelationName
                                 ? $resolver->qualifyColumn('flatname', $customVarRelationName)
@@ -169,19 +170,24 @@ trait Auth
                     }
 
                     if ($applyHostRestriction && ($restriction = $role->getRestrictions('icingadb/filter/hosts'))) {
-                        $roleFilter->add($this->parseRestriction($restriction, 'icingadb/filter/hosts'));
+                        $hostFilter = $this->parseRestriction($restriction, 'icingadb/filter/hosts');
+                        if ($orgQuery instanceof UnionQuery) {
+                            $this->forceQueryOptimization($hostFilter, 'hostgroup.name');
+                        }
+
+                        $roleFilter->add($hostFilter);
                     }
 
                     if (
                         $applyServiceRestriction
                         && ($restriction = $role->getRestrictions('icingadb/filter/services'))
                     ) {
-                        $roleFilter->add(
-                            Filter::any(
-                                Filter::unequal('service.id', '*'),
-                                $this->parseRestriction($restriction, 'icingadb/filter/services')
-                            )
-                        );
+                        $serviceFilter = $this->parseRestriction($restriction, 'icingadb/filter/services');
+                        if ($orgQuery instanceof UnionQuery) {
+                            $this->forceQueryOptimization($serviceFilter, 'servicegroup.name');
+                        }
+
+                        $roleFilter->add(Filter::any(Filter::unlike('service.id', '*'), $serviceFilter));
                     }
                 }
 
@@ -197,7 +203,12 @@ trait Auth
 
                 $columns = $query->getColumns();
                 if (empty($columns)) {
-                    $columns = [$flatvaluePath, '*'];
+                    $columns = [
+                        $customVarRelationName
+                            ? $resolver->qualifyColumn('flatname', $customVarRelationName)
+                            : 'flatname',
+                        $flatvaluePath
+                    ];
                 }
 
                 $flatvalue = null;
@@ -232,7 +243,7 @@ trait Auth
                         ...$values
                     );
 
-                    $query->setColumns($columns);
+                    $query->columns($columns);
                 }
             }
 
@@ -305,20 +316,43 @@ trait Auth
     }
 
     /**
-     * Parse the given blacklist
+     * Parse the given denylist
      *
-     * @param string $blacklist Comma separated list of column names
-     * @param string $column The column which should not equal any of the blacklisted names
+     * @param string $denylist Comma separated list of column names
+     * @param string $column The column which should not equal any of the denylisted names
      *
      * @return Filter\None
      */
-    protected function parseBlacklist(string $blacklist, string $column): Filter\None
+    protected function parseDenylist(string $denylist, string $column): Filter\None
     {
         $filter = Filter::none();
-        foreach (explode(',', $blacklist) as $value) {
-            $filter->add(Filter::equal($column, trim($value)));
+        foreach (explode(',', $denylist) as $value) {
+            $filter->add(Filter::like($column, trim($value)));
         }
 
         return $filter;
+    }
+
+    /**
+     * Force query optimization on the given service/host filter rule
+     *
+     * Applies forceOptimization, when the given filter rule contains the given filter column
+     *
+     * @param Filter\Rule $filterRule
+     * @param string $filterColumn
+     *
+     * @return void
+     */
+    protected function forceQueryOptimization(Filter\Rule $filterRule, string $filterColumn)
+    {
+        // TODO: This is really a very poor solution is therefore only a quick fix.
+        //  We need to somehow manage to make this more enjoyable and creative!
+        if ($filterRule instanceof Filter\Chain) {
+            foreach ($filterRule as $rule) {
+                $this->forceQueryOptimization($rule, $filterColumn);
+            }
+        } elseif ($filterRule->getColumn() === $filterColumn) {
+            $filterRule->metaData()->set('forceOptimization', true);
+        }
     }
 }

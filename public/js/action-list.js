@@ -20,7 +20,7 @@
     var ActionList = function (icinga) {
         Icinga.EventListener.call(this, icinga);
 
-        this.on('click', '.action-list > .list-item:not(.page-separator), .action-list > .list-item a[href]', this.onClick, this);
+        this.on('click', '.action-list [data-action-item]:not(.page-separator), .action-list [data-action-item] a[href]', this.onClick, this);
         this.on('close-column', this.onColumnClose, this);
 
         this.on('rendered', '.container', this.onRendered, this);
@@ -32,11 +32,10 @@
         var _this = event.data.self;
         var $activeItems;
         var $target = $(event.currentTarget);
-        var $item = $target.closest('.list-item');
-        var $list = $item.parent('.action-list');
+        var $item = $target.closest('[data-action-item]');
+        var $list = $item.closest('.action-list');
 
-        if ($target.closest('[data-no-icinga-ajax]').length > 0) {
-            // Quickfix? Interferes with loadmore.js otherwise
+        if ($target.is('a') && ! $target.is('.subject')) {
             return true;
         }
 
@@ -52,7 +51,7 @@
             } else if (event.shiftKey) {
                 document.getSelection().removeAllRanges();
 
-                $activeItems = $list.find('.list-item.active');
+                $activeItems = $list.find('[data-action-item].active');
 
                 var $firstActiveItem = $activeItems.first();
 
@@ -70,7 +69,7 @@
                     $item.nextUntil($lastActiveItem).addClass('active');
                 }
             } else {
-                $list.find('.list-item.active').removeClass('active');
+                $list.find('[data-action-item].active').removeClass('active');
                 $item.addClass('active');
             }
 
@@ -79,11 +78,11 @@
                 container.append('<div class="footer" data-action-list-automatically-added></div>');
             }
         } else {
-            $list.find('.list-item.active').removeClass('active');
+            $list.find('[data-action-item].active').removeClass('active');
             $item.addClass('active');
         }
 
-        $activeItems = $list.find('.list-item.active');
+        $activeItems = $list.find('[data-action-item].active');
         var footer = container.children('.footer');
 
         if ($activeItems.length === 0) {
@@ -194,7 +193,7 @@
         }
 
         if ($list.length && $list.is('[data-icinga-multiselect-url]')) {
-            var $activeItems = $list.find('.list-item.active');
+            var $activeItems = $list.find('[data-action-item].active');
 
             if ($activeItems.length) {
                 if (! $target.children('.footer').length) {

@@ -9,6 +9,7 @@ use Icinga\Module\Icingadb\Model\User;
 use Icinga\Module\Icingadb\Web\Controller;
 use Icinga\Module\Icingadb\Widget\Detail\UserDetail;
 use Icinga\Module\Icingadb\Widget\ItemList\UserList;
+use ipl\Stdlib\Filter;
 
 class UserController extends Controller
 {
@@ -19,13 +20,12 @@ class UserController extends Controller
     {
         $this->assertRouteAccess('users');
 
-        $this->setTitle(t('User'));
+        $this->addTitleTab(t('User'));
 
         $name = $this->params->getRequired('name');
 
         $query = User::on($this->getDb());
-        $query->getSelectBase()
-            ->where(['user.name = ?' => $name]);
+        $query->filter(Filter::equal('user.name', $name));
 
         $this->applyRestrictions($query);
 
@@ -35,6 +35,7 @@ class UserController extends Controller
         }
 
         $this->user = $user;
+        $this->setTitle($user->display_name);
     }
 
     public function indexAction()

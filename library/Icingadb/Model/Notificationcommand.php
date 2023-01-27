@@ -5,6 +5,7 @@
 namespace Icinga\Module\Icingadb\Model;
 
 use Icinga\Module\Icingadb\Model\Behavior\ReRoute;
+use ipl\Orm\Behavior\Binary;
 use ipl\Orm\Behaviors;
 use ipl\Orm\Model;
 use ipl\Orm\Relations;
@@ -35,11 +36,11 @@ class Notificationcommand extends Model
         ];
     }
 
-    public function getMetaData()
+    public function getColumnDefinitions()
     {
         return [
-            'zone_id'               => t('Notificationcommand Zone Id'),
-            'environment_id'        => t('Notificationcommand Environment Id'),
+            'zone_id'               => t('Zone Id'),
+            'environment_id'        => t('Environment Id'),
             'name_checksum'         => t('Notificationcommand Name Checksum'),
             'properties_checksum'   => t('Notificationcommand Properties Checksum'),
             'name'                  => t('Notificationcommand Name'),
@@ -57,6 +58,14 @@ class Notificationcommand extends Model
             'service'       => 'notification.service',
             'servicegroup'  => 'notification.service.servicegroup'
         ]));
+
+        $behaviors->add(new Binary([
+            'id',
+            'zone_id',
+            'environment_id',
+            'name_checksum',
+            'properties_checksum'
+        ]));
     }
 
     public function createRelations(Relations $relations)
@@ -68,7 +77,7 @@ class Notificationcommand extends Model
             ->through(NotificationcommandCustomvar::class);
         $relations->belongsToMany('customvar_flat', CustomvarFlat::class)
             ->through(NotificationcommandCustomvar::class);
-        $relations->belongsToMany('vars', CustomvarFlat::class)
+        $relations->belongsToMany('vars', Vars::class)
             ->through(NotificationcommandCustomvar::class);
 
         $relations->hasMany('notification', Notification::class);

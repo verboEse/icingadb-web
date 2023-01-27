@@ -10,12 +10,11 @@ use Icinga\Module\Icingadb\Model\State;
 use Icinga\Module\Icingadb\Util\PluginOutput;
 use Icinga\Module\Icingadb\Widget\CheckAttempt;
 use Icinga\Module\Icingadb\Widget\EmptyState;
+use Icinga\Module\Icingadb\Widget\IconImage;
 use Icinga\Module\Icingadb\Widget\PluginOutputContainer;
-use ipl\Web\Url;
 use ipl\Web\Widget\TimeSince;
 use ipl\Html\BaseHtmlElement;
 use ipl\Html\Html;
-use ipl\Html\HtmlElement;
 use ipl\Html\Text;
 use ipl\Web\Widget\Icon;
 use ipl\Web\Widget\StateBall;
@@ -59,34 +58,7 @@ abstract class StateListItem extends BaseListItem
     protected function assembleIconImage(BaseHtmlElement $iconImage)
     {
         if (isset($this->item->icon_image->icon_image)) {
-            $src = $this->item->icon_image->icon_image;
-
-            if (strpos($src, '.') === false) {
-                $iconImage->addHtml(new Icon($src));
-
-                return;
-            }
-
-            if (strpos($src, '/') === false) {
-                $src = 'img/icons/' . $src;
-            }
-
-            if (getenv('ICINGAWEB_EXPORT_FORMAT') === 'pdf') {
-                $srcUrl = Url::fromPath($src);
-                $path = $srcUrl->getRelativeUrl();
-                if (! $srcUrl->isExternal() && file_exists($path) && is_file($path)) {
-                    $mimeType = @mime_content_type($path);
-                    $content = @file_get_contents($path);
-                    if ($mimeType !== false && $content !== false) {
-                        $src = "data:$mimeType;base64," . base64_encode($content);
-                    }
-                }
-            }
-
-            $iconImage->addHtml(HtmlElement::create('img', [
-                'src' => $src,
-                'alt' => $this->item->icon_image_alt
-            ]));
+            $iconImage->addHtml(new IconImage($this->item->icon_image->icon_image, $this->item->icon_image_alt));
         } else {
             $iconImage->addAttributes(['class' => 'placeholder']);
         }
@@ -106,27 +78,15 @@ abstract class StateListItem extends BaseListItem
         $stateBall = new StateBall($this->state->getStateText(), $this->getStateBallSize());
 
         if ($this->state->is_handled) {
-            switch (true) {
-                case $this->state->in_downtime:
-                    $icon = Icons::IN_DOWNTIME;
-                    break;
-                case $this->state->is_acknowledged:
-                    $icon = Icons::IS_ACKNOWLEDGED;
-                    break;
-                case $this->state->is_flapping:
-                    $icon = Icons::IS_FLAPPING;
-                    break;
-                default:
-                    $icon = Icons::HOST_DOWN;
-            }
-
-            $stateBall->addHtml(new Icon($icon));
+            $stateBall->addHtml(new Icon($this->getHandledIcon()));
             $stateBall->getAttributes()->add('class', 'handled');
         }
 
         $visual->addHtml($stateBall);
         if ($this->state->state_type === 'soft') {
-            $visual->addHtml(new CheckAttempt((int) $this->state->attempt, (int) $this->item->max_check_attempts));
+            $visual->addHtml(
+                new CheckAttempt((int) $this->state->check_attempt, (int) $this->item->max_check_attempts)
+            );
         }
     }
 
@@ -139,6 +99,20 @@ abstract class StateListItem extends BaseListItem
             return $since;
         } elseif ($this->state->last_state_change !== null) {
             return new TimeSince($this->state->last_state_change);
+        }
+    }
+
+    protected function getHandledIcon(): string
+    {
+        switch (true) {
+            case $this->state->in_downtime:
+                return Icons::IN_DOWNTIME;
+            case $this->state->is_acknowledged:
+                return Icons::IS_ACKNOWLEDGED;
+            case $this->state->is_flapping:
+                return Icons::IS_FLAPPING;
+            default:
+                return Icons::HOST_DOWN;
         }
     }
 

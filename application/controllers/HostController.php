@@ -41,9 +41,9 @@ class HostController extends Controller
         $name = $this->params->getRequired('name');
 
         $query = Host::on($this->getDb())->with(['state', 'icon_image']);
-        $query->setResultSetClass(VolatileStateResults::class);
-        $query->getSelectBase()
-            ->where(['host.name = ?' => $name]);
+        $query
+            ->setResultSetClass(VolatileStateResults::class)
+            ->filter(Filter::equal('host.name', $name));
 
         $this->applyRestrictions($query);
 
@@ -57,13 +57,13 @@ class HostController extends Controller
         $this->loadTabsForObject($host);
 
         $this->setTitleTab($this->getRequest()->getActionName());
+        $this->setTitle($host->display_name);
     }
 
     public function indexAction()
     {
-        $serviceSummary = ServicestateSummary::on($this->getDb())->with('state');
-        $serviceSummary->getSelectBase()
-            ->where(['service.host_id = ?' => $this->host->id]);
+        $serviceSummary = ServicestateSummary::on($this->getDb());
+        $serviceSummary->filter(Filter::equal('service.host_id', $this->host->id));
 
         $this->applyRestrictions($serviceSummary);
 
@@ -123,12 +123,10 @@ class HostController extends Controller
             'state'
         ]);
 
-        $history
-            ->getSelectBase()
-            ->where([
-                'history.host_id = ?' => $this->host->id,
-                'history.service_id IS NULL'
-            ]);
+        $history->filter(Filter::all(
+            Filter::equal('history.host_id', $this->host->id),
+            Filter::unlike('history.service_id', '*')
+        ));
 
         $before = $this->params->shift('before', time());
         $url = Url::fromRequest()->setParams(clone $this->params);
@@ -194,11 +192,9 @@ class HostController extends Controller
             'host',
             'host.state'
         ]);
-        $services->setResultSetClass(VolatileStateResults::class);
-
         $services
-            ->getSelectBase()
-            ->where(['service_host.id = ?' => $this->host->id]);
+            ->setResultSetClass(VolatileStateResults::class)
+            ->filter(Filter::equal('host.id', $this->host->id));
 
         $this->applyRestrictions($services);
 
@@ -271,7 +267,7 @@ class HostController extends Controller
         if ($tab !== null) {
             $tab->setActive();
 
-            $this->view->title = $tab->getLabel();
+            $this->setTitle($tab->getLabel());
         }
     }
 

@@ -11,14 +11,16 @@ use Icinga\Module\Icingadb\Model\Behavior\ReRoute;
 use Icinga\Module\Icingadb\Model\CustomvarFlat;
 use Icinga\Module\Icingadb\Model\Host;
 use Icinga\Module\Icingadb\Model\Service;
+use Icinga\Module\Icingadb\Util\ObjectSuggestionsCursor;
 use ipl\Html\HtmlElement;
 use ipl\Orm\Exception\InvalidColumnException;
 use ipl\Orm\Exception\InvalidRelationException;
 use ipl\Orm\Model;
+use ipl\Orm\Relation;
 use ipl\Orm\Relation\BelongsToMany;
+use ipl\Orm\Relation\HasOne;
 use ipl\Orm\Resolver;
 use ipl\Orm\UnionModel;
-use ipl\Sql\Cursor;
 use ipl\Sql\Expression;
 use ipl\Sql\Select;
 use ipl\Stdlib\Filter;
@@ -89,14 +91,37 @@ class ObjectSuggestions extends Suggestions
         return $this->model;
     }
 
+    protected function shouldShowRelationFor(string $column): bool
+    {
+        if (strpos($column, '.vars.') !== false) {
+            return false;
+        }
+
+        $tableName = $this->getModel()->getTableName();
+        $columnPath = explode('.', $column);
+
+        switch (count($columnPath)) {
+            case 3:
+                if ($columnPath[1] !== 'state' || ! in_array($tableName, ['host', 'service'])) {
+                    return true;
+                }
+
+                // For host/service state relation columns apply the same rules
+            case 2:
+                return $columnPath[0] !== $tableName;
+            default:
+                return true;
+        }
+    }
+
     protected function createQuickSearchFilter($searchTerm)
     {
         $model = $this->getModel();
 
         $quickFilter = Filter::any();
         foreach ($model->getSearchColumns() as $column) {
-            $where = Filter::equal($model->getTableName() . '.' . $column, $searchTerm);
-            $where->metaData()->set('columnLabel', $model->getMetaData()[$column]);
+            $where = Filter::like($model->getTableName() . '.' . $column, $searchTerm);
+            $where->metaData()->set('columnLabel', $model->getColumnDefinitions()[$column]);
             $quickFilter->add($where);
         }
 
@@ -124,6 +149,12 @@ class ObjectSuggestions extends Suggestions
         $columnPath = $query->getResolver()->qualifyPath($column, $model->getTableName());
         list($targetPath, $columnName) = preg_split('/(?<=vars)\.|\.(?=[^.]+$)/', $columnPath);
 
+        $isCustomVar = false;
+        if (substr($targetPath, -5) === '.vars') {
+            $isCustomVar = true;
+            $targetPath = substr($targetPath, 0, -4) . 'customvar_flat';
+        }
+
         if (strpos($targetPath, '.') !== false) {
             try {
                 $query->with($targetPath); // TODO: Remove this, once ipl/orm does it as early
@@ -132,13 +163,14 @@ class ObjectSuggestions extends Suggestions
             }
         }
 
-        if (substr($targetPath, -5) === '.vars') {
+        if ($isCustomVar) {
             $columnPath = $targetPath . '.flatvalue';
-            $query->filter(Filter::equal($targetPath . '.flatname', $columnName));
+            $query->filter(Filter::like($targetPath . '.flatname', $columnName));
         }
 
-        $inputFilter = Filter::equal($columnPath, $searchTerm);
+        $inputFilter = Filter::like($columnPath, $searchTerm);
         $query->columns($columnPath);
+        $query->orderBy($columnPath);
 
         // This had so many iterations, if it still doesn't work, consider removing it entirely :(
         if ($searchFilter instanceof Filter\None) {
@@ -160,7 +192,7 @@ class ObjectSuggestions extends Suggestions
         $this->applyRestrictions($query);
 
         try {
-            return (new Cursor($query->getDb(), $query->assembleSelect()->distinct()))
+            return (new ObjectSuggestionsCursor($query->getDb(), $query->assembleSelect()->distinct()))
                 ->setFetchMode(PDO::FETCH_COLUMN);
         } catch (InvalidColumnException $e) {
             throw new SearchException(sprintf(t('"%s" is not a valid column'), $e->getColumn()));
@@ -169,8 +201,11 @@ class ObjectSuggestions extends Suggestions
 
     protected function fetchColumnSuggestions($searchTerm)
     {
+        $model = $this->getModel();
+        $query = $model::on($this->getDb());
+
         // Ordinary columns first
-        foreach (self::collectFilterColumns($this->getModel()) as $columnName => $columnMeta) {
+        foreach (self::collectFilterColumns($model, $query->getResolver()) as $columnName => $columnMeta) {
             yield $columnName => $columnMeta;
         }
 
@@ -207,7 +242,7 @@ class ObjectSuggestions extends Suggestions
 
     protected function matchSuggestion($path, $label, $searchTerm)
     {
-        if (preg_match('/_(?>id|bin|checksum)$/', $path)) {
+        if (preg_match('/[_.](id|bin|checksum)$/', $path)) {
             // Only suggest exotic columns if the user knows about them
             $trimmedSearch = trim($searchTerm, ' *');
             return substr($path, -strlen($trimmedSearch)) === $trimmedSearch;
@@ -249,7 +284,7 @@ class ObjectSuggestions extends Suggestions
 
         $customVars->columns('flatname');
         $this->applyRestrictions($customVars);
-        $customVars->filter(Filter::equal('flatname', $searchTerm));
+        $customVars->filter(Filter::like('flatname', $searchTerm));
         $idColumn = $resolver->qualifyColumn('id', $resolver->getAlias($customVars->getModel()));
         $customVars = $customVars->assembleSelect();
 
@@ -269,15 +304,26 @@ class ObjectSuggestions extends Suggestions
      *
      * @return Generator
      */
-    public static function collectFilterColumns(Model $model, Resolver $resolver = null): Generator
+    public static function collectFilterColumns(Model $model, Resolver $resolver): Generator
     {
-        if ($resolver === null) {
-            $resolver = new Resolver();
+        if ($model instanceof UnionModel) {
+            $models = [];
+            foreach ($model->getUnions() as $union) {
+                /** @var Model $unionModel */
+                $unionModel = new $union[0]();
+                $models[$unionModel->getTableName()] = $unionModel;
+                self::collectRelations($resolver, $unionModel, $models, []);
+            }
+        } else {
+            $models = [$model->getTableName() => $model];
+            self::collectRelations($resolver, $model, $models, []);
         }
 
-        $metaData = $resolver->getMetaData($model);
-        foreach ($metaData as $columnName => $columnMeta) {
-            yield $columnName => $columnMeta;
+        foreach ($models as $path => $targetModel) {
+            /** @var Model $targetModel */
+            foreach ($resolver->getColumnDefinitions($targetModel) as $columnName => $definition) {
+                yield $path . '.' . $columnName => $definition->getLabel();
+            }
         }
 
         foreach ($resolver->getBehaviors($model) as $behavior) {
@@ -287,38 +333,66 @@ class ObjectSuggestions extends Suggestions
                         $resolver->qualifyPath($route, $model->getTableName()),
                         $model
                     );
-                    foreach ($relation->getTarget()->getMetaData() as $columnName => $columnMeta) {
-                        yield $name . '.' . $columnName => $columnMeta;
+                    foreach ($resolver->getColumnDefinitions($relation->getTarget()) as $columnName => $definition) {
+                        yield $name . '.' . $columnName => $definition->getLabel();
                     }
                 }
             }
         }
 
         if ($model instanceof UnionModel) {
-            $baseModelClass = $model->getUnions()[0][0];
+            $queries = $model->getUnions();
+            $baseModelClass = end($queries)[0];
             $model = new $baseModelClass();
         }
 
         $foreignMetaDataSources = [];
         if (! $model instanceof Host) {
-            $foreignMetaDataSources[] = ['host.user', ' (' . t('Host') . ')'];
-            $foreignMetaDataSources[] = ['host.usergroup', ' (' . t('Host') . ')'];
+            $foreignMetaDataSources[] = 'host.user';
+            $foreignMetaDataSources[] = 'host.usergroup';
         }
 
         if (! $model instanceof Service) {
-            $foreignMetaDataSources[] = ['service.user', ' (' . t('Service') . ')'];
-            $foreignMetaDataSources[] = ['service.usergroup', ' (' . t('Service') . ')'];
+            $foreignMetaDataSources[] = 'service.user';
+            $foreignMetaDataSources[] = 'service.usergroup';
         }
 
-        foreach ($foreignMetaDataSources as list($path, $suffix)) {
-            $foreignMetaData = $resolver->resolveRelation(
+        foreach ($foreignMetaDataSources as $path) {
+            $foreignColumnDefinitions = $resolver->getColumnDefinitions($resolver->resolveRelation(
                 $resolver->qualifyPath($path, $model->getTableName()),
                 $model
-            )
-                ->getTarget()
-                ->getMetaData();
-            foreach ($foreignMetaData as $columnName => $columnMeta) {
-                yield "$path.$columnName" => $columnMeta . $suffix;
+            )->getTarget());
+            foreach ($foreignColumnDefinitions as $columnName => $columnDefinition) {
+                yield "$path.$columnName" => $columnDefinition->getLabel();
+            }
+        }
+    }
+
+    /**
+     * Collect all direct relations of the given model
+     *
+     * A direct relation is either a direct descendant of the model
+     * or a descendant of such related in a to-one cardinality.
+     *
+     * @param Resolver $resolver
+     * @param Model $subject
+     * @param array $models
+     * @param array $path
+     */
+    protected static function collectRelations(Resolver $resolver, Model $subject, array &$models, array $path)
+    {
+        foreach ($resolver->getRelations($subject) as $name => $relation) {
+            /** @var Relation $relation */
+            $isHasOne = $relation instanceof HasOne;
+            if (empty($path) || $name === 'state' || $name === 'last_comment') {
+                $relationPath = [$name];
+                if ($isHasOne && empty($path)) {
+                    array_unshift($relationPath, $subject->getTableName());
+                }
+
+                $relationPath = array_merge($path, $relationPath);
+                $models[join('.', $relationPath)] = $relation->getTarget();
+                self::collectRelations($resolver, $relation->getTarget(), $models, $relationPath);
             }
         }
     }

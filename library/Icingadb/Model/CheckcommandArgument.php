@@ -4,6 +4,8 @@
 
 namespace Icinga\Module\Icingadb\Model;
 
+use ipl\Orm\Behavior\Binary;
+use ipl\Orm\Behaviors;
 use ipl\Orm\Model;
 use ipl\Orm\Relations;
 
@@ -37,22 +39,32 @@ class CheckcommandArgument extends Model
         ];
     }
 
-    public function getMetaData()
+    public function getColumnDefinitions()
     {
         return [
-            'checkcommand_id'       => t('Checkcommand Argument Command Id'),
-            'argument_key'          => t('Checkcommand Argument Key'),
-            'environment_id'        => t('Checkcommand Argument Environment Id'),
+            'checkcommand_id'       => t('Checkcommand Id'),
+            'argument_key'          => t('Checkcommand Argument Name'),
+            'environment_id'        => t('Environment Id'),
             'properties_checksum'   => t('Checkcommand Argument Properties Checksum'),
             'argument_value'        => t('Checkcommand Argument Value'),
-            'argument_order'        => t('Checkcommand Argument Order'),
+            'argument_order'        => t('Checkcommand Argument Position'),
             'description'           => t('Checkcommand Argument Description'),
-            'argument_key_override' => t('Checkcommand Argument Key Override'),
-            'repeat_key'            => t('Checkcommand Argument Repeat Key'),
+            'argument_key_override' => t('Checkcommand Argument Actual Name'),
+            'repeat_key'            => t('Checkcommand Argument Repeated'),
             'required'              => t('Checkcommand Argument Required'),
-            'set_if'                => t('Checkcommand Argument Set If'),
-            'skip_key'              => t('Checkcommand Argument Skip Key')
+            'set_if'                => t('Checkcommand Argument Condition'),
+            'skip_key'              => t('Checkcommand Argument Without Name')
         ];
+    }
+
+    public function createBehaviors(Behaviors $behaviors)
+    {
+        $behaviors->add(new Binary([
+            'id',
+            'checkcommand_id',
+            'environment_id',
+            'properties_checksum'
+        ]));
     }
 
     public function createRelations(Relations $relations)

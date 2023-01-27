@@ -120,7 +120,6 @@ class ObjectAuthorization
             $query
                 ->filter($filter)
                 ->filter(Filter::equal($object->getKeyName(), $uniqueId))
-                ->getSelectBase()
                 ->columns([new Expression('1')]);
 
             $result = $query->execute()->hasResult();
@@ -199,7 +198,7 @@ class ObjectAuthorization
         $rolesWithRestrictions = [];
         if (! empty($roleExpressions)) {
             if ($cache) {
-                $query->columns('id')->columns($roleExpressions);
+                $query->columns('id')->withColumns($roleExpressions);
                 $query->filter($filter);
             } else {
                 $query = [$this->getDb()->fetchOne((new Select())->columns($roleExpressions))];
@@ -240,16 +239,17 @@ class ObjectAuthorization
             return false;
         }
 
+        $granted = false;
         foreach ($this->getAuth()->getUser()->getRoles() as $role) {
-            if (! $role->grants($permission) || $role->denies($permission)) {
+            if ($role->denies($permission)) {
+                return false;
+            } elseif ($granted || ! $role->grants($permission)) {
                 continue;
             }
 
-            if (in_array($role->getName(), $roles, true)) {
-                return true;
-            }
+            $granted = in_array($role->getName(), $roles, true);
         }
 
-        return false;
+        return $granted;
     }
 }

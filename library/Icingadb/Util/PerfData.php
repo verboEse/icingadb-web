@@ -426,8 +426,8 @@ class PerfData
         $parts = explode(';', $this->perfdataValue);
 
         $matches = array();
-        if (preg_match('@^(-?\d+(\.\d+)?)([a-zA-Z%°]{1,3})$@u', $parts[0], $matches)) {
-            $this->unit = $matches[3];
+        if (preg_match('@^(-?(?:\d+)?(?:\.\d+)?)([a-zA-Z%°]{1,3})$@u', $parts[0], $matches)) {
+            $this->unit = $matches[2];
             $this->value = $matches[1];
         } else {
             $this->value = $parts[0];
@@ -551,7 +551,7 @@ class PerfData
             case ! is_numeric($value):
                 return $value;
             default:
-                return number_format($value, 2);
+                return number_format($value, 2) . ($this->unit !== null ? ' ' . $this->unit : '');
         }
     }
 
@@ -568,7 +568,7 @@ class PerfData
             $html ? '<b>%s %s</b> (%s%%)' : '%s %s (%s%%)',
             htmlspecialchars($this->getLabel()),
             $this->format($this->value),
-            number_format($this->getPercentage(), 2)
+            number_format($this->getPercentage() ?? 0, 2)
         );
     }
 
